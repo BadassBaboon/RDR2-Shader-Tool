@@ -167,17 +167,13 @@ class BuilderPage(tk.Frame):
         api = "vulkan" if "vulkan" in fxdb_path.name.lower() or "feeb1b85" in fxdb_path.name.lower() else "dx12"
 
         def work():
-            from r2core import replacements
+            from r2core import replacements, rpf_reader
             mods = replacements.scan_modified_shaders(api)
-            fxdb = fxdb_parser.get_cached_fxdb(fxdb_path, decompress_bytecode=False)
-            fxdb_slots = set()
-            for st, records in fxdb.shaders.items():
-                for r in records:
-                    fxdb_slots.add((st, r.index))
-
+            target_canonical = rpf_reader.resolve_fxdb_name(fxdb_path.name).lower()
             result = []
-            for slot, m in mods.items():
-                if slot in fxdb_slots:
+            for (db, st, idx), m in mods.items():
+                canonical_db = rpf_reader.resolve_fxdb_name(db).lower()
+                if db == fxdb_path.name.lower() or canonical_db == target_canonical:
                     result.append(m)
             return result
 

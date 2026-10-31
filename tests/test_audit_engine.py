@@ -98,8 +98,15 @@ class TestAuditEngine(unittest.TestCase):
 
     def test_modified_shader_detection_and_filtering(self):
         mods = replacements.scan_modified_shaders("vulkan", cat=self.cat)
-        # We know VS_Clear_Wrapped is compiled in compiled/vulkan
-        self.assertIn(("VS", 0), mods)
-        mod_info = mods[("VS", 0)]
+        # We know VS_Clear_Wrapped is compiled in compiled/vulkan and belongs to sga_vulkan_final_init.fxdb
+        self.assertIn(("sga_vulkan_final_init.fxdb", "VS", 0), mods)
+        self.assertNotIn(("sga_vulkan_final.fxdb", "VS", 0), mods)
+
+        mod_info = mods[("sga_vulkan_final_init.fxdb", "VS", 0)]
         self.assertEqual(mod_info["name"], "VS_Clear_Wrapped")
         self.assertNotEqual(mod_info["old_crc"], mod_info["new_crc"])
+
+        clear_entries = self.cat.find(query="VS_Clear_Wrapped", api="vulkan")
+        passthrough_entries = self.cat.find(query="VS_PassthroughComposite_Wrapped", api="vulkan")
+        self.assertTrue(replacements.is_entry_modified(clear_entries[0], mods))
+        self.assertFalse(replacements.is_entry_modified(passthrough_entries[0], mods))

@@ -403,22 +403,17 @@ class BrowserPage(tk.Frame):
 
         entries = cat.find(query=self.search.get(), stage=st, api=api, library=lib_filter)
         if stage_filter == "REPLACED":
-            entries = [e for e in entries if (e.stage, e.index) in mods]
+            entries = [e for e in entries if replacements.is_entry_modified(e, mods)]
 
         entries = self._sort_entries(entries)
         self._displayed_entries = entries
 
         for idx, e in enumerate(entries):
-            is_mod = (e.stage, e.index) in mods
-            if is_mod:
-                row_tag = "modified"
-                st_text = f"{e.stage} [MOD]"
-            else:
-                row_tag = "even" if idx % 2 == 0 else "odd"
-                st_text = e.stage
+            is_mod = replacements.is_entry_modified(e, mods)
+            row_tag = "modified" if is_mod else ("even" if idx % 2 == 0 else "odd")
 
             self.tree.insert("", "end", iid=str(idx), values=(
-                st_text, e.index, e.name, e.renodx_hash, f"{e.byte_size:,} B"
+                e.stage, e.index, e.name, e.renodx_hash, f"{e.byte_size:,} B"
             ), tags=(row_tag,))
 
         lib_info = f" ({lib_filter})" if lib_filter else ""
@@ -465,7 +460,7 @@ class BrowserPage(tk.Frame):
                 else:
                     self.detail_text.insert("end", txt)
 
-            mod_info = self.modified_map.get((entry.stage, entry.index))
+            mod_info = replacements.get_entry_mod_info(entry, self.modified_map)
             if mod_info:
                 append("MODIFIED SHADER READY FOR REPACK / INJECTION\n", "title")
                 append("----------------------------------------------------------------------\n", "meta_key")

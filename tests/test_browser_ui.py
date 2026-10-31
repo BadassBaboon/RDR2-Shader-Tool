@@ -124,16 +124,18 @@ class TestBrowserUI(unittest.TestCase):
         self.page.stage_var.set("REPLACED")
         self.page.refresh()
         displayed = self.page._displayed_entries
-        self.assertGreaterEqual(len(displayed), 1, "Should show at least 1 modified shader")
+        self.assertEqual(len(displayed), 1, "Should show exactly 1 modified shader (VS_Clear_Wrapped)")
         names = [e.name for e in displayed]
         self.assertIn("VS_Clear_Wrapped", names)
+        self.assertNotIn("VS_PassthroughComposite_Wrapped", names)
 
-        # Verify row tag in treeview is "modified"
+        # Verify row tag in treeview is "modified" and stage text does not have clipped [MOD]
         first_item = self.page.tree.get_children()[0]
         tags = self.page.tree.item(first_item, "tags")
         self.assertIn("modified", tags)
         values = self.page.tree.item(first_item, "values")
-        self.assertIn("[MOD]", values[0])
+        self.assertEqual(values[0], "VS")
+        self.assertNotIn("[MOD]", values[0])
 
         # Reset filter
         self.page.stage_var.set("ALL")

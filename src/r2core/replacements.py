@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from . import catalog, hashing, paths
+from . import catalog, hashing, paths, rpf_reader
 
 
 def _strip_profile_suffix(stem: str) -> str:
@@ -16,10 +16,12 @@ def _strip_profile_suffix(stem: str) -> str:
     return stem
 
 
-def scan_modified_shaders(api: str, cat: Optional[catalog.Catalog] = None) -> Dict[Tuple[str, int], Dict[str, Any]]:
-    """Scan compiled/ directory and map modified shaders to their target (stage, index) slot.
+def scan_modified_shaders(
+    api: str, cat: Optional[catalog.Catalog] = None
+) -> Dict[Tuple[str, str, int], Dict[str, Any]]:
+    """Scan compiled/ directory and map modified shaders to their target (db_name, stage, index) slot.
     
-    Returns a dict mapping (stage, index) to metadata about the replacement file.
+    Returns a dict mapping (fxdb_filename_lower, stage, index) to metadata about the replacement file.
     """
     if cat is None:
         cat = catalog.get_default_catalog()
@@ -45,7 +47,7 @@ def scan_modified_shaders(api: str, cat: Optional[catalog.Catalog] = None) -> Di
     if not candidate_files:
         return {}
 
-    modified: Dict[Tuple[str, int], Dict[str, Any]] = {}
+    modified: Dict[Tuple[str, str, int], Dict[str, Any]] = {}
 
     for f in candidate_files:
         stem = f.stem
@@ -73,7 +75,6 @@ def scan_modified_shaders(api: str, cat: Optional[catalog.Catalog] = None) -> Di
                 parts = clean_stem.split("_", 1)
                 if len(parts) == 2 and parts[0].isdigit():
                     idx = int(parts[0])
-                    # Check parent folder for stage if present
                     parent_stage = f.parent.name.upper()
                     st = parent_stage if parent_stage in ("VS", "PS", "CS", "GS", "DS", "HS") else None
                     for e in cat.by_api.get(api_lower, []):
@@ -86,7 +87,6 @@ def scan_modified_shaders(api: str, cat: Optional[catalog.Catalog] = None) -> Di
             if by_name:
                 matched_entries.extend(by_name)
             else:
-                # Try with full stem as well
                 by_full = cat.get_by_name(stem, api=api_lower)
                 if by_full:
                     matched_entries.extend(by_full)
@@ -104,9 +104,11 @@ def scan_modified_shaders(api: str, cat: Optional[catalog.Catalog] = None) -> Di
         for entry in matched_entries:
             # If replacement bytecode differs from stock FXDB bytecode, it is modified
             if new_crc != entry.crc:
-                slot_key = (entry.stage, entry.index)
+                db_name = Path(entry.fxdb_path).name.lower()
+                slot_key = (db_name, entry.stage, entry.index)
                 rel = str(f.relative_to(paths.ROOT)) if f.is_relative_to(paths.ROOT) else str(f)
                 modified[slot_key] = {
+                    "fxdb_name": db_name,
                     "stage": entry.stage,
                     "index": entry.index,
                     "name": entry.name,
@@ -123,11 +125,39 @@ def scan_modified_shaders(api: str, cat: Optional[catalog.Catalog] = None) -> Di
     return modified
 
 
-def get_replacements_for_fxdb(fxdb_path: Union[str, Path], api: Optional[str] = None) -> Dict[Tuple[str, int], bytes]:
+def is_entry_modified(
+    entry: catalog.CatalogEntry, mods: Dict[Tuple[str, str, int], Dict[str, Any]]
+) -> bool:
+    """Return True if the specific catalog entry has a modified replacement ready."""
+    db_name = Path(entry.fxdb_path).name.lower()
+    return (db_name, entry.stage, entry.index) in mods
+
+
+def get_entry_mod_info(
+    entry: catalog.CatalogEntry, mods: Dict[Tuple[str, str, int], Dict[str, Any]]
+) -> Optional[Dict[str, Any]]:
+    """Return replacement metadata for a specific catalog entry, or None if unmodified."""
+    db_name = Path(entry.fxdb_path).name.lower()
+    return mods.get((db_name, entry.stage, entry.index))
+
+
+def get_replacements_for_fxdb(
+    fxdb_path: Union[str, Path], api: Optional[str] = None
+) -> Dict[Tuple[str, int], bytes]:
     """Return dictionary of (stage, index) -> bytecode for all modified shaders matching an FXDB file."""
     p = Path(fxdb_path)
+    target_db = p.name.lower()
+    canonical_target = rpf_reader.resolve_fxdb_name(target_db).lower()
+
     if api is None:
-        api = "vulkan" if "vulkan" in p.name.lower() or "feeb1b85" in p.name.lower() else "dx12"
+        api = "vulkan" if "vulkan" in canonical_target or "feeb1b85" in canonical_target else "dx12"
 
     mods = scan_modified_shaders(api)
-    return {k: v["data"] for k, v in mods.items()}
+    result: Dict[Tuple[str, int], bytes] = {}
+
+    for (db, st, idx), m in mods.items():
+        canonical_db = rpf_reader.resolve_fxdb_name(db).lower()
+        if db == target_db or canonical_db == canonical_target:
+            result[(st, idx)] = m["data"]
+
+    return result
