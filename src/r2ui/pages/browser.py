@@ -24,26 +24,29 @@ class BrowserPage(tk.Frame):
         toolbar = tk.Frame(self, bg=T.BG_ALT, height=T.px(48))
         toolbar.pack(fill="x", padx=T.px(10), pady=(T.px(10), 0))
 
-        self.search = SearchEntry(toolbar, placeholder="Search shader name, hash, or effect...", on_search=self._on_search)
+        self.search = SearchEntry(toolbar, self.fonts, placeholder="Search shader name or 0xHash...", on_search=self._on_search)
         self.search.pack(side="left", fill="x", expand=True, padx=(0, T.px(10)), pady=T.px(6))
 
         # Stage filter
         self.stage_var = tk.StringVar(value="ALL")
         stages = ["ALL", "VS", "PS", "CS", "GS", "DS", "HS"]
-        stage_menu = ttk.Combobox(toolbar, textvariable=self.stage_var, values=stages, width=6, state="readonly")
-        stage_menu.pack(side="left", padx=(0, T.px(10)))
+        stage_menu = ttk.Combobox(toolbar, textvariable=self.stage_var, values=stages, width=7, state="readonly")
+        stage_menu.pack(side="left", padx=(0, T.px(10)), pady=T.px(6))
         stage_menu.bind("<<ComboboxSelected>>", lambda e: self._on_search(self.search.get()))
 
-        btn_reload = tk.Button(toolbar, text="↻ Refresh", bg=T.BG_PANEL, fg=T.TEXT_MAIN, relief="flat", padx=T.px(10), command=self.refresh)
-        btn_reload.pack(side="right")
+        btn_reload = tk.Button(
+            toolbar, text="Reload", bg=T.BG_PANEL, fg=T.TEXT_MAIN, activebackground=T.BG_ALT, activeforeground=T.TEXT_MAIN,
+            font=self.fonts["header_small"], relief="flat", padx=T.px(12), pady=T.px(4), command=self.refresh, cursor="hand2"
+        )
+        btn_reload.pack(side="right", padx=T.px(6), pady=T.px(6))
 
         # Main split container
         paned = tk.PanedWindow(self, orient="horizontal", bg=T.BORDER, sashwidth=4)
         paned.pack(fill="both", expand=True, padx=T.px(10), pady=T.px(10))
 
         # Left: TreeView list of shaders
-        left_frame = tk.Frame(paned, bg=T.BG)
-        paned.add(left_frame, minsize=T.px(450))
+        left_frame = tk.Frame(paned, bg=T.BG_INPUT)
+        paned.add(left_frame, minsize=T.px(480))
 
         cols = ("stage", "index", "name", "crc", "size")
         self.tree = ttk.Treeview(left_frame, columns=cols, show="headings", selectmode="browse")
@@ -55,9 +58,13 @@ class BrowserPage(tk.Frame):
 
         self.tree.column("stage", width=T.px(55), anchor="center")
         self.tree.column("index", width=T.px(50), anchor="center")
-        self.tree.column("name", width=T.px(220), anchor="w")
+        self.tree.column("name", width=T.px(240), anchor="w")
         self.tree.column("crc", width=T.px(90), anchor="center")
-        self.tree.column("size", width=T.px(70), anchor="e")
+        self.tree.column("size", width=T.px(75), anchor="e")
+
+        # Alternating row colors
+        self.tree.tag_configure("odd", background=T.BG_INPUT)
+        self.tree.tag_configure("even", background=T.BG_ALT)
 
         tree_scroll = ttk.Scrollbar(left_frame, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=tree_scroll.set)
@@ -68,38 +75,60 @@ class BrowserPage(tk.Frame):
 
         # Right: Detail Inspector
         right_frame = tk.Frame(paned, bg=T.BG_ALT)
-        paned.add(right_frame, minsize=T.px(500))
+        paned.add(right_frame, minsize=T.px(520))
+
+        # Inspector Title Bar
+        header_bar = tk.Frame(right_frame, bg=T.BG_ALT)
+        header_bar.pack(fill="x", padx=T.px(14), pady=(T.px(10), T.px(4)))
 
         self.detail_header = tk.Label(
-            right_frame, text="Select a shader to inspect details",
-            font=self.fonts["header"], fg=T.TEXT_MAIN, bg=T.BG_ALT, anchor="w", padx=T.px(12), pady=T.px(10)
+            header_bar, text="Select a shader to inspect reflection",
+            font=self.fonts["header"], fg=T.TEXT_MAIN, bg=T.BG_ALT, anchor="w"
         )
-        self.detail_header.pack(fill="x")
+        self.detail_header.pack(side="left")
 
         # Action Buttons
         act_bar = tk.Frame(right_frame, bg=T.BG_ALT)
-        act_bar.pack(fill="x", padx=T.px(12), pady=(0, T.px(10)))
+        act_bar.pack(fill="x", padx=T.px(14), pady=(0, T.px(8)))
 
         self.btn_decompile = tk.Button(
-            act_bar, text="▼ Decompile to HLSL", bg=T.ACCENT, fg=T.ON_ACCENT,
-            font=self.fonts["body"], relief="flat", padx=T.px(14), pady=T.px(4),
-            command=self._decompile_selected, state="disabled"
+            act_bar, text="Decompile to HLSL", bg=T.ACCENT, fg=T.ON_ACCENT,
+            activebackground=T.ACCENT_HOVER, activeforeground=T.ON_ACCENT,
+            font=self.fonts["header_small"], relief="flat", padx=T.px(14), pady=T.px(5),
+            command=self._decompile_selected, state="disabled", cursor="hand2"
         )
         self.btn_decompile.pack(side="left", padx=(0, T.px(8)))
 
         self.btn_view_source = tk.Button(
-            act_bar, text="Open in Editor Page", bg=T.BG_PANEL, fg=T.TEXT_MAIN,
-            font=self.fonts["body"], relief="flat", padx=T.px(12), pady=T.px(4),
-            command=self._open_in_editor, state="disabled"
+            act_bar, text="Open in Editor", bg=T.BG_PANEL, fg=T.TEXT_MAIN,
+            activebackground=T.BG_ALT, activeforeground=T.TEXT_MAIN,
+            font=self.fonts["header_small"], relief="flat", padx=T.px(12), pady=T.px(5),
+            command=self._open_in_editor, state="disabled", cursor="hand2"
         )
         self.btn_view_source.pack(side="left")
 
         # Detail text widget (Registers, CBuffers, Reflection)
+        detail_container = tk.Frame(right_frame, bg=T.BG_INPUT, bd=1, relief="solid")
+        detail_container.pack(fill="both", expand=True, padx=T.px(14), pady=(0, T.px(12)))
+
         self.detail_text = tk.Text(
-            right_frame, bg=T.BG, fg=T.TEXT_MAIN, font=self.fonts["mono"],
+            detail_container, bg=T.BG_INPUT, fg=T.TEXT_MAIN, font=self.fonts["mono_small"],
+            selectbackground=T.ACCENT_ACTIVE, selectforeground="#FFFFFF",
             relief="flat", bd=0, padx=T.px(12), pady=T.px(10), state="disabled"
         )
-        self.detail_text.pack(fill="both", expand=True, padx=T.px(12), pady=(0, T.px(12)))
+        detail_scroll = ttk.Scrollbar(detail_container, orient="vertical", command=self.detail_text.yview)
+        self.detail_text.config(yscrollcommand=detail_scroll.set)
+        self.detail_text.pack(side="left", fill="both", expand=True)
+        detail_scroll.pack(side="right", fill="y")
+
+        # Text tag styles for syntax coloring in reflection dump
+        self.detail_text.tag_configure("title", font=self.fonts["header_small"], foreground=T.GOLD)
+        self.detail_text.tag_configure("meta_key", font=self.fonts["mono_small"], foreground=T.TEXT_MUTED)
+        self.detail_text.tag_configure("meta_val", font=self.fonts["mono_small"], foreground=T.TEXT_MAIN)
+        self.detail_text.tag_configure("cb_head", font=self.fonts["mono_bold"], foreground=T.GOLD)
+        self.detail_text.tag_configure("var_type", font=self.fonts["mono_small"], foreground=T.CYAN)
+        self.detail_text.tag_configure("var_offset", font=self.fonts["mono_small"], foreground=T.TEXT_DIM)
+        self.detail_text.tag_configure("var_name", font=self.fonts["mono_small"], foreground=T.TEXT_MAIN)
 
     def refresh(self):
         self.tree.delete(*self.tree.get_children())
@@ -109,10 +138,11 @@ class BrowserPage(tk.Frame):
         st = None if stage_filter == "ALL" else stage_filter
 
         entries = cat.find(query=self.search.get(), stage=st, api=api)
-        for e in entries[:300]:
+        for idx, e in enumerate(entries[:400]):
+            row_tag = "even" if idx % 2 == 0 else "odd"
             self.tree.insert("", "end", iid=f"{e.stage}_{e.index}_{e.crc}", values=(
                 e.stage, e.index, e.name, e.crc_hex, f"{e.byte_size:,} B"
-            ))
+            ), tags=(row_tag,))
 
         self.app.set_status(f"Loaded {len(entries)} shaders for {api.upper()}")
 
@@ -136,42 +166,50 @@ class BrowserPage(tk.Frame):
         entry = entries[0]
         self.selected_entry = entry
 
-        # Enable buttons
         self.btn_decompile.config(state="normal")
         self.btn_view_source.config(state="normal")
 
-        self.detail_header.config(text=f"{entry.name} ({entry.stage}[{entry.index}]) — {entry.api.upper()}")
+        self.detail_header.config(text=f"{entry.name}  [{entry.stage}:{entry.index}]  ({entry.api.upper()})")
 
         # Load reflection
         try:
             fxdb = parse_file(entry.fxdb_path, decompress_bytecode=True)
             rec = fxdb.shaders[entry.stage][entry.index]
 
-            lines = [
-                f"Shader:      {rec.name}",
-                f"Stage:       {rec.stage}[{rec.index}]",
-                f"API:         {entry.api.upper()}",
-                f"CRC32:       {entry.crc_hex}",
-                f"Signature:   {entry.sig_hex}",
-                f"Size:        {len(rec.bytecode):,} bytes (On-Disk: {len(rec.raw_bytecode):,} bytes, Compressed: {rec.is_compressed})",
-                f"Belongs to:  {', '.join(entry.effects) or 'General'}",
-                "\n" + "=" * 60,
-                "REGISTERS & CONSTANT BUFFERS (RAGE SGA v1 Reflection):",
-                "=" * 60,
-            ]
-
-            if not rec.data.resources:
-                lines.append("  (No direct constant buffer or resource bindings)")
-            else:
-                for r in rec.data.resources:
-                    lines.append(f"\n[Slot {r.bind_point}] {r.resource_class.name} :: {r.name} ({r.resource_type.name}, Size={r.byte_size}B)")
-                    for el in r.elements:
-                        arr = f"[{el.array_size}]" if el.array_size > 0 else ""
-                        lines.append(f"    +{el.start_offset:04d}: {el.var_type.name:<10} {el.name}{arr}")
-
             self.detail_text.config(state="normal")
             self.detail_text.delete("1.0", "end")
-            self.detail_text.insert("1.0", "\n".join(lines))
+
+            def append(txt: str, tag: str = None):
+                if tag:
+                    self.detail_text.insert("end", txt, tag)
+                else:
+                    self.detail_text.insert("end", txt)
+
+            append("SHADER METADATA\n", "title")
+            append("----------------------------------------------------------------------\n", "meta_key")
+            append("Name:        ", "meta_key"); append(f"{rec.name}\n", "meta_val")
+            append("Stage:       ", "meta_key"); append(f"{rec.stage} (Index {rec.index})\n", "meta_val")
+            append("API:         ", "meta_key"); append(f"{entry.api.upper()}\n", "meta_val")
+            append("CRC32:       ", "meta_key"); append(f"{entry.crc_hex}\n", "meta_val")
+            append("Signature:   ", "meta_key"); append(f"{entry.sig_hex}\n", "meta_val")
+            append("Size:        ", "meta_key"); append(f"{len(rec.bytecode):,} B (Raw disk: {len(rec.raw_bytecode):,} B, Compressed: {rec.is_compressed})\n", "meta_val")
+            append("Effects:     ", "meta_key"); append(f"{', '.join(entry.effects) or 'None'}\n", "meta_val")
+
+            append("\nCONSTANT BUFFERS & REGISTERS (RAGE SGA v1 Reflection)\n", "title")
+            append("----------------------------------------------------------------------\n", "meta_key")
+
+            if not rec.data.resources:
+                append("  No direct constant buffer or resource bindings in this stage.\n", "meta_key")
+            else:
+                for r in rec.data.resources:
+                    append(f"\n[Slot {r.bind_point:02d}] {r.resource_class.name} :: {r.name}", "cb_head")
+                    append(f" ({r.resource_type.name}, Size={r.byte_size} B)\n", "meta_key")
+                    for el in r.elements:
+                        arr = f"[{el.array_size}]" if el.array_size > 0 else ""
+                        append(f"    +{el.start_offset:04d}: ", "var_offset")
+                        append(f"{el.var_type.name:<12} ", "var_type")
+                        append(f"{el.name}{arr}\n", "var_name")
+
             self.detail_text.config(state="disabled")
 
         except Exception as ex:
@@ -200,15 +238,13 @@ class BrowserPage(tk.Frame):
                 messagebox.showerror("Decompile Error", f"Failed to decompile {entry.name}:\n{res.error}")
                 return
 
-            # Save to source/
             out_path = paths.SOURCE_DIR / entry.api / rec.stage / f"{rec.name}.{rec.stage.lower()}_6_0.hlsl"
             paths.ensure(out_path.parent)
             out_path.write_text(res.source_code, encoding="utf-8")
 
-            # Switch to Editor page
             self.app.pages["source"].load_file(out_path)
             self.app.show_page("source")
-            self.app.set_status(f"Decompiled {entry.name} -> {out_path.name}")
+            self.app.set_status(f"Decompiled {entry.name} to {out_path.name}")
 
         self.app.tasks.run(work, done=done, label=f"Decompile {entry.name}")
 

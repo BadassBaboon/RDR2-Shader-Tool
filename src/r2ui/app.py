@@ -11,10 +11,10 @@ from . import tasks, theme as T, widgets as W
 from .pages import BrowserPage, BuilderPage, LmlPage, SourcePage
 
 PAGES = [
-    ("browser", "Shader Browser", "Explore shaders, constant buffers, and decompile"),
-    ("source", "Source & Compile", "Edit HLSL/GLSL, compile to SPIR-V/DXIL, watch mode"),
-    ("builder", "FXDB Builder", "Unpack and repack .fxdb shader libraries"),
-    ("lml", "Lenny's Mod Loader", "1-click deploy to game without editing .rpf"),
+    ("browser", "Shaders", "Browse shaders, reflection metadata, and constant buffers"),
+    ("source", "Code Editor", "Edit and compile HLSL/GLSL to SPIR-V or DXIL with watch mode"),
+    ("builder", "FXDB Builder", "Extract and repack RAGE SGD1 shader libraries"),
+    ("lml", "LML Deployer", "Deploy modified shaders directly to Lenny's Mod Loader VFS"),
 ]
 
 
@@ -25,9 +25,12 @@ class App:
         self.fonts = T.setup_fonts(self.root)
         self.cfg = settings.settings()
 
-        self.root.title("RDR2 Shader Tool (Vulkan & DX12)")
-        self.root.geometry(self.cfg.get("Window", "geometry", f"{T.px(1360)}x{T.px(880)}"))
-        self.root.minsize(T.px(1080), T.px(680))
+        # Apply global dark theme to all TTK widgets (Treeview, Scrollbar, Combobox)
+        T.apply_ttk_theme(self.root, self.fonts)
+
+        self.root.title("Red Dead Redemption 2 Shader Tool")
+        self.root.geometry(self.cfg.get("Window", "geometry", f"{T.px(1380)}x{T.px(880)}"))
+        self.root.minsize(T.px(1100), T.px(700))
         self.root.configure(bg=T.BG)
 
         self.active_api = self.cfg.active_api
@@ -44,46 +47,81 @@ class App:
 
     def _build_layout(self):
         # 1. Top Header Band
+        active_lib = "sga_vulkan_final.fxdb" if self.active_api == "vulkan" else "sga_win32_60_final.fxdb"
         self.header = W.HeaderBand(
             self.root, self.fonts,
-            title="Red Dead Redemption 2 Shader Tool",
-            subtitle="Modding & Shader Math Workbench for Vulkan and DirectX 12"
+            title="RED DEAD REDEMPTION II",
+            subtitle=f"Active API: {self.active_api.upper()} ({active_lib})"
         )
-        self.header.pack(fill="x")
+        self.header.pack(side="top", fill="x")
 
         # API Switcher on top right of header band
-        api_switch = W.Segmented(
+        self.api_switch = W.Segmented(
             self.header.right,
-            options=[("vulkan", "Vulkan (Default)"), ("dx12", "DirectX 12")],
+            self.fonts,
+            options=[("vulkan", "VULKAN"), ("dx12", "DIRECTX 12")],
             value=self.active_api,
             command=self.set_api
         )
-        api_switch.pack(side="left", padx=(0, T.px(16)), pady=T.px(14))
+        self.api_switch.pack(side="left", padx=(0, T.px(16)), pady=T.px(14))
 
-        # 2. Main Middle Area (Sidebar Navigation + Page Container)
+        # 2. Bottom Status Bar (Created before middle area to guarantee correct layout packing)
+        f_sep = tk.Frame(self.root, bg=T.BORDER, height=1)
+        f_sep.pack(side="bottom", fill="x")
+
+        self.footer = tk.Frame(self.root, bg=T.BG_ALT, height=T.px(28))
+        self.footer.pack(side="bottom", fill="x")
+        self.footer.pack_propagate(False)
+
+        self.status_lbl = tk.Label(
+            self.footer, text="Ready", font=self.fonts["small"],
+            fg=T.TEXT_MUTED, bg=T.BG_ALT, anchor="w", padx=T.px(12)
+        )
+        self.status_lbl.pack(side="left", fill="y")
+
+        # Game & LML status middle label
+        game_ok = self.cfg.game_dir.exists()
+        lml_ok = (self.cfg.game_dir / "lml").exists()
+        info_str = f"Game: {'Found' if game_ok else 'Not Set'}  |  LML: {'Ready' if lml_ok else 'Not Installed'}"
+        self.info_lbl = tk.Label(
+            self.footer, text=info_str, font=self.fonts["mono_small"],
+            fg=T.TEXT_DIM, bg=T.BG_ALT, anchor="center"
+        )
+        self.info_lbl.pack(side="left", expand=True)
+
+        self.busy_lbl = tk.Label(
+            self.footer, text="", font=self.fonts["small"],
+            fg=T.GOLD, bg=T.BG_ALT, anchor="e", padx=T.px(12)
+        )
+        self.busy_lbl.pack(side="right", fill="y")
+
+        # 3. Main Middle Area (Sidebar Navigation + Page Container)
         middle = tk.Frame(self.root, bg=T.BG)
         middle.pack(fill="both", expand=True)
 
         # Sidebar navigation
-        sidebar = tk.Frame(middle, bg=T.BG_ALT, width=T.px(220))
+        sidebar = tk.Frame(middle, bg=T.BG_ALT, width=T.px(210))
         sidebar.pack(side="left", fill="y")
         sidebar.pack_propagate(False)
 
-        # Separator
+        # Hairline separator between sidebar and content
         sep = tk.Frame(middle, bg=T.BORDER, width=1)
         sep.pack(side="left", fill="y")
 
         self.nav_buttons = {}
-        tk.Label(sidebar, text="NAVIGATION", font=self.fonts["small"], fg=T.TEXT_DIM, bg=T.BG_ALT, anchor="w", padx=T.px(16)).pack(fill="x", pady=(T.px(16), T.px(6)))
+        tk.Label(
+            sidebar, text="WORKBENCH", font=self.fonts["mono_small"],
+            fg=T.GOLD_MUTED, bg=T.BG_ALT, anchor="w", padx=T.px(18)
+        ).pack(fill="x", pady=(T.px(14), T.px(8)))
 
         for page_id, label, desc in PAGES:
             btn = tk.Button(
-                sidebar, text=f"  {label}", font=self.fonts["body"],
+                sidebar, text=f"  {label}", font=self.fonts["header_small"],
                 bg=T.BG_ALT, fg=T.TEXT_MUTED, activebackground=T.BG_PANEL, activeforeground=T.TEXT_MAIN,
-                relief="flat", bd=0, anchor="w", padx=T.px(14), pady=T.px(10), cursor="hand2",
+                relief="flat", bd=0, anchor="w", padx=T.px(14), pady=T.px(9), cursor="hand2",
                 command=lambda pid=page_id: self.show_page(pid)
             )
-            btn.pack(fill="x", padx=T.px(8), pady=1)
+            btn.pack(fill="x", padx=T.px(8), pady=2)
             self.nav_buttons[page_id] = btn
 
         # Page container
@@ -99,26 +137,6 @@ class App:
         for p in self.pages.values():
             p.pack_forget()
 
-        # 3. Bottom Status Bar
-        self.footer = tk.Frame(self.root, bg=T.BG_ALT, height=T.px(28))
-        self.footer.pack(fill="x", side="bottom")
-        self.footer.pack_propagate(False)
-
-        f_sep = tk.Frame(self.root, bg=T.BORDER, height=1)
-        f_sep.pack(fill="x", side="bottom")
-
-        self.status_lbl = tk.Label(
-            self.footer, text="Ready", font=self.fonts["small"],
-            fg=T.TEXT_MUTED, bg=T.BG_ALT, anchor="w", padx=T.px(12)
-        )
-        self.status_lbl.pack(side="left", fill="y")
-
-        self.busy_lbl = tk.Label(
-            self.footer, text="", font=self.fonts["small"],
-            fg=T.YELLOW, bg=T.BG_ALT, anchor="e", padx=T.px(12)
-        )
-        self.busy_lbl.pack(side="right", fill="y")
-
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
     def show_page(self, page_id: str):
@@ -133,12 +151,13 @@ class App:
         page = self.pages[page_id]
         page.pack(fill="both", expand=True)
 
-        self.nav_buttons[page_id].config(bg=T.ACCENT, fg=T.ON_ACCENT)
+        self.nav_buttons[page_id].config(bg=T.ACCENT_ACTIVE, fg="#FFFFFF")
 
         # Update header subtitle
+        active_lib = "sga_vulkan_final.fxdb" if self.active_api == "vulkan" else "sga_win32_60_final.fxdb"
         for pid, label, desc in PAGES:
             if pid == page_id:
-                self.header.set_title("Red Dead Redemption 2 Shader Tool", f"{label} — {desc}")
+                self.header.set_title("RED DEAD REDEMPTION II", f"{label}: {desc} ({active_lib})")
                 break
 
         if hasattr(page, "refresh"):
@@ -149,7 +168,8 @@ class App:
     def set_api(self, api: str):
         self.active_api = api.lower()
         self.cfg.active_api = self.active_api
-        self.set_status(f"Switched active API to {self.active_api.upper()}")
+        active_lib = "sga_vulkan_final.fxdb" if self.active_api == "vulkan" else "sga_win32_60_final.fxdb"
+        self.set_status(f"Active API: {self.active_api.upper()} ({active_lib})")
 
         cur_page = self.pages.get(self.current_page_name)
         if cur_page and hasattr(cur_page, "refresh"):
@@ -165,7 +185,10 @@ class App:
         pass
 
     def _catalog_ready(self, cat):
-        self.set_status(f"Catalog indexed: {len(cat.entries)} shaders loaded across Vulkan and DX12")
+        count = len(cat.entries)
+        active_lib = "sga_vulkan_final.fxdb" if self.active_api == "vulkan" else "sga_win32_60_final.fxdb"
+        self.set_status(f"Catalog indexed: {count} shaders available across Vulkan and DX12")
+        self.header.set_title("RED DEAD REDEMPTION II", f"Active API: {self.active_api.upper()} ({active_lib}) • {count} shaders loaded")
         if self.current_page_name == "browser":
             self.pages["browser"].refresh()
 

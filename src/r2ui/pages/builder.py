@@ -21,46 +21,69 @@ class BuilderPage(tk.Frame):
 
     def _build_ui(self):
         # Top toolbar
-        toolbar = tk.Frame(self, bg=T.BG_ALT, height=T.px(56))
+        toolbar = tk.Frame(self, bg=T.BG_ALT, height=T.px(54))
         toolbar.pack(fill="x", padx=T.px(10), pady=(T.px(10), 0))
 
-        tk.Label(toolbar, text="FXDB Library:", bg=T.BG_ALT, fg=T.TEXT_MAIN, font=self.fonts["body"]).pack(side="left", padx=(T.px(10), T.px(6)))
+        tk.Label(
+            toolbar, text="FXDB Library:", bg=T.BG_ALT, fg=T.GOLD_MUTED, font=self.fonts["mono_small"]
+        ).pack(side="left", padx=(T.px(12), T.px(6)), pady=T.px(8))
 
         self.lib_var = tk.StringVar()
-        self.combo_lib = ttk.Combobox(toolbar, textvariable=self.lib_var, width=35, state="readonly")
-        self.combo_lib.pack(side="left", padx=T.px(6))
+        self.combo_lib = ttk.Combobox(toolbar, textvariable=self.lib_var, width=32, state="readonly")
+        self.combo_lib.pack(side="left", padx=T.px(4), pady=T.px(8))
         self.combo_lib.bind("<<ComboboxSelected>>", lambda e: self._on_lib_change())
 
-        btn_browse = tk.Button(toolbar, text="Browse...", bg=T.BG_PANEL, fg=T.TEXT_MAIN, relief="flat", padx=T.px(8), command=self._browse_fxdb)
-        btn_browse.pack(side="left", padx=T.px(6))
+        btn_browse = tk.Button(
+            toolbar, text="Browse...", bg=T.BG_PANEL, fg=T.TEXT_MAIN,
+            activebackground=T.BG_ALT, activeforeground=T.TEXT_MAIN,
+            font=self.fonts["header_small"], relief="flat", padx=T.px(10), pady=T.px(4),
+            command=self._browse_fxdb, cursor="hand2"
+        )
+        btn_browse.pack(side="left", padx=T.px(4))
 
         self.btn_unpack = tk.Button(
-            toolbar, text="📦 Unpack All Shaders", bg=T.BG_PANEL, fg=T.TEXT_MAIN,
-            font=self.fonts["body"], relief="flat", padx=T.px(12), pady=T.px(4),
-            command=self._unpack_library
+            toolbar, text="Unpack Shaders", bg=T.BG_PANEL, fg=T.TEXT_MAIN,
+            activebackground=T.BG_ALT, activeforeground=T.TEXT_MAIN,
+            font=self.fonts["header_small"], relief="flat", padx=T.px(14), pady=T.px(4),
+            command=self._unpack_library, cursor="hand2"
         )
-        self.btn_unpack.pack(side="left", padx=T.px(10))
+        self.btn_unpack.pack(side="left", padx=(T.px(10), T.px(4)))
 
         self.btn_repack = tk.Button(
-            toolbar, text="📤 Repack (Inject Changed)", bg=T.ACCENT, fg=T.ON_ACCENT,
-            font=self.fonts["body"], relief="flat", padx=T.px(14), pady=T.px(4),
-            command=self._repack_library
+            toolbar, text="Repack Modified Shaders", bg=T.ACCENT, fg=T.ON_ACCENT,
+            activebackground=T.ACCENT_HOVER, activeforeground=T.ON_ACCENT,
+            font=self.fonts["header_small"], relief="flat", padx=T.px(16), pady=T.px(4),
+            command=self._repack_library, cursor="hand2"
         )
-        self.btn_repack.pack(side="left", padx=T.px(6))
+        self.btn_repack.pack(side="left", padx=T.px(4))
 
         # Main content
         main_frame = tk.Frame(self, bg=T.BG)
         main_frame.pack(fill="both", expand=True, padx=T.px(10), pady=T.px(10))
 
-        # Changed shaders detection panel
+        # Modified shaders panel
+        head_panel = tk.Frame(main_frame, bg=T.BG)
+        head_panel.pack(fill="x", pady=(0, T.px(6)))
+
         lbl_changed = tk.Label(
-            main_frame, text="Modified Shaders Detected for Repack:",
-            font=self.fonts["header"], fg=T.TEXT_MAIN, bg=T.BG, anchor="w", pady=T.px(6)
+            head_panel, text="MODIFIED SHADERS DETECTED FOR INJECTION",
+            font=self.fonts["mono_small"], fg=T.GOLD_MUTED, bg=T.BG, anchor="w"
         )
-        lbl_changed.pack(fill="x")
+        lbl_changed.pack(side="left")
+
+        btn_scan = tk.Button(
+            head_panel, text="Rescan compiled/", bg=T.BG_PANEL, fg=T.TEXT_MUTED,
+            activebackground=T.BG_ALT, activeforeground=T.TEXT_MAIN,
+            font=self.fonts["small"], relief="flat", padx=T.px(8), pady=1,
+            command=self._detect_changes, cursor="hand2"
+        )
+        btn_scan.pack(side="right")
+
+        table_box = tk.Frame(main_frame, bg=T.BG_INPUT, bd=1, relief="solid")
+        table_box.pack(fill="both", expand=True)
 
         cols = ("stage", "index", "name", "old_crc", "new_crc", "file")
-        self.tree = ttk.Treeview(main_frame, columns=cols, show="headings", selectmode="browse")
+        self.tree = ttk.Treeview(table_box, columns=cols, show="headings", selectmode="browse")
         self.tree.heading("stage", text="Stage")
         self.tree.heading("index", text="#")
         self.tree.heading("name", text="Shader Name")
@@ -75,7 +98,10 @@ class BuilderPage(tk.Frame):
         self.tree.column("new_crc", width=T.px(100), anchor="center")
         self.tree.column("file", width=T.px(300), anchor="w")
 
-        scroll = ttk.Scrollbar(main_frame, orient="vertical", command=self.tree.yview)
+        self.tree.tag_configure("odd", background=T.BG_INPUT)
+        self.tree.tag_configure("even", background=T.BG_ALT)
+
+        scroll = ttk.Scrollbar(table_box, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=scroll.set)
         self.tree.pack(side="left", fill="both", expand=True)
         scroll.pack(side="right", fill="y")
@@ -99,168 +125,161 @@ class BuilderPage(tk.Frame):
         self.fxdb_files = found
         names = [f.name for f in found]
         self.combo_lib["values"] = names
+
         if names:
-            # Prefer active API file
-            api = self.app.active_api
-            preferred = [n for n in names if api in n.lower()]
-            self.combo_lib.set(preferred[0] if preferred else names[0])
-            self._on_lib_change()
+            preferred = "sga_vulkan_final.fxdb" if self.app.active_api == "vulkan" else "sga_win32_60_final.fxdb"
+            if preferred in names:
+                self.combo_lib.set(preferred)
+            else:
+                self.combo_lib.current(0)
+            self._detect_changes()
 
     def _browse_fxdb(self):
         f = filedialog.askopenfilename(
-            title="Select RDR2 FXDB Shader Library",
-            filetypes=[("FXDB Shader Libraries", "*.fxdb *.bin"), ("All Files", "*.*")]
+            title="Select FXDB Shader Database",
+            initialdir=str(paths.DEFAULT_DUMP_DIR),
+            filetypes=[("FXDB Databases", "*.fxdb;*.bin"), ("All Files", "*.*")]
         )
         if f:
             p = Path(f)
             if p not in self.fxdb_files:
                 self.fxdb_files.append(p)
-                self.combo_lib["values"] = [f.name for f in self.fxdb_files]
+                self.combo_lib["values"] = [x.name for x in self.fxdb_files]
             self.combo_lib.set(p.name)
-            self._on_lib_change()
+            self._detect_changes()
 
-    def _get_selected_fxdb(self) -> Optional[Path]:
+    def _on_lib_change(self):
+        self._detect_changes()
+
+    def _get_selected_fxdb_path(self) -> Optional[Path]:
         name = self.lib_var.get()
         for f in self.fxdb_files:
             if f.name == name:
                 return f
         return None
 
-    def _on_lib_change(self):
-        fxdb = self._get_selected_fxdb()
-        if not fxdb:
-            return
-        self._scan_modified_shaders(fxdb)
-
-    def _scan_modified_shaders(self, fxdb_path: Path):
+    def _detect_changes(self):
         self.tree.delete(*self.tree.get_children())
-        is_vulkan = "vulkan" in fxdb_path.name.lower() or "vk" in fxdb_path.name.lower()
-        api = "vulkan" if is_vulkan else "dx12"
-        ext = "spv" if is_vulkan else "cso"
-
-        search_dir = paths.COMPILED_DIR / api / fxdb_path.stem
-        if not search_dir.exists():
+        fxdb_path = self._get_selected_fxdb_path()
+        if not fxdb_path or not fxdb_path.exists():
             return
 
-        try:
-            parsed = fxdb_parser.parse_file(fxdb_path, decompress_bytecode=True)
-            for f in search_dir.rglob(f"*.{ext}"):
-                st = f.parent.name.upper()
-                if st not in fxdb_parser.STAGES:
-                    continue
+        def work():
+            fxdb = fxdb_parser.parse_file(fxdb_path, decompress_bytecode=True)
+            modified = []
+            compiled_dir = paths.COMPILED_DIR
 
-                fname = f.stem
-                matched_record = None
-                parts = fname.split("_", 1)
-                if len(parts) == 2 and parts[0].isdigit():
-                    idx = int(parts[0])
-                    recs = parsed.shaders.get(st, [])
-                    if 0 <= idx < len(recs):
-                        matched_record = recs[idx]
-
-                if not matched_record:
-                    for r in parsed.shaders.get(st, []):
-                        if r.name.lower() == fname.lower():
-                            matched_record = r
+            for stage_name, list_records in fxdb.shaders.items():
+                for rec in list_records:
+                    patterns = [
+                        f"{rec.name}.spv",
+                        f"{rec.name}.cso",
+                        f"{rec.name}.{stage_name.lower()}_6_0.spv",
+                        f"{rec.name}.{stage_name.lower()}_6_0.cso",
+                        f"{stage_name.lower()}_{rec.index:08d}.spv",
+                        f"{stage_name.lower()}_{rec.index:08d}.cso",
+                    ]
+                    for pat in patterns:
+                        candidate = compiled_dir / pat
+                        if candidate.exists():
+                            new_bytes = candidate.read_bytes()
+                            new_crc = hashing.crc32(new_bytes)
+                            if new_crc != rec.crc32:
+                                modified.append({
+                                    "stage": rec.stage,
+                                    "index": rec.index,
+                                    "name": rec.name,
+                                    "old_crc": f"0x{rec.crc32:08X}",
+                                    "new_crc": f"0x{new_crc:08X}",
+                                    "file": str(candidate.relative_to(paths.ROOT_DIR)),
+                                    "path": candidate,
+                                    "data": new_bytes,
+                                })
                             break
+            return modified
 
-                if matched_record:
-                    new_bytes = f.read_bytes()
-                    new_crc = hashing.crc32(new_bytes)
-                    if new_crc != matched_record.crc:
-                        self.tree.insert("", "end", values=(
-                            st, matched_record.index, matched_record.name,
-                            hashing.fmt(matched_record.crc), hashing.fmt(new_crc),
-                            str(f.relative_to(paths.ROOT))
-                        ))
-        except Exception as ex:
-            print(f"Error scanning modified shaders: {ex}")
+        def done(modified_list):
+            for idx, m in enumerate(modified_list):
+                row_tag = "even" if idx % 2 == 0 else "odd"
+                self.tree.insert("", "end", values=(
+                    m["stage"], m["index"], m["name"], m["old_crc"], m["new_crc"], m["file"]
+                ), tags=(row_tag,))
+
+            count = len(modified_list)
+            self.app.set_status(f"Found {count} modified shaders ready to repack")
+
+        self.app.tasks.run(work, done=done, label="Detecting modified shaders")
 
     def _unpack_library(self):
-        fxdb = self._get_selected_fxdb()
-        if not fxdb:
+        fxdb_path = self._get_selected_fxdb_path()
+        if not fxdb_path:
+            messagebox.showinfo("Select Library", "Select an FXDB library to unpack.")
             return
 
-        self.app.set_busy(True, f"Unpacking {fxdb.name}...")
+        dest_dir = paths.DECOMPILED_DIR / fxdb_path.stem
+        self.app.set_busy(True, f"Unpacking {fxdb_path.name}...")
 
         def work():
-            parsed = fxdb_parser.parse_file(fxdb, decompress_bytecode=True)
-            is_vulkan = "vulkan" in fxdb.name.lower() or "vk" in fxdb.name.lower()
-            api = "vulkan" if is_vulkan else "dx12"
-            ext = "spv" if is_vulkan else "cso"
-            out_base = paths.COMPILED_DIR / api / fxdb.stem
-            paths.ensure(out_base)
+            fxdb = fxdb_parser.parse_file(fxdb_path, decompress_bytecode=True)
+            total = sum(len(v) for v in fxdb.shaders.values())
+            count = 0
+            for stage_name, list_records in fxdb.shaders.items():
+                stage_dir = dest_dir / stage_name
+                paths.ensure(stage_dir)
+                for rec in list_records:
+                    ext = "spv" if rec.bytecode[:4] == b"\x03\x02\x23\x07" else "cso"
+                    fn = stage_dir / f"{rec.index:04d}_{rec.name}.{ext}"
+                    fn.write_bytes(rec.bytecode)
+                    count += 1
+            return count, dest_dir
 
-            cnt = 0
-            for st, records in parsed.shaders.items():
-                sdir = out_base / st
-                paths.ensure(sdir)
-                for r in records:
-                    ofile = sdir / f"{r.index:04d}_{r.name}.{ext}"
-                    ofile.write_bytes(r.bytecode)
-                    cnt += 1
-            return cnt, out_base
-
-        def done(tup):
+        def done(res):
             self.app.set_busy(False, "")
-            cnt, out_base = tup
-            messagebox.showinfo("Unpack Complete", f"Successfully unpacked {cnt:,} shaders to:\n{out_base}")
-            self.app.set_status(f"Unpacked {cnt} shaders from {fxdb.name}")
-            self._scan_modified_shaders(fxdb)
+            count, out_dir = res
+            messagebox.showinfo("Unpack Complete", f"Unpacked {count} shaders to:\n{out_dir}")
+            self.app.set_status(f"Unpacked {count} shaders -> {out_dir.name}")
 
-        self.app.tasks.run(work, done=done, label=f"Unpack {fxdb.name}")
+        self.app.tasks.run(work, done=done, label=f"Unpack {fxdb_path.name}")
 
     def _repack_library(self):
-        fxdb = self._get_selected_fxdb()
-        if not fxdb:
+        fxdb_path = self._get_selected_fxdb_path()
+        if not fxdb_path:
+            messagebox.showinfo("Select Library", "Select an FXDB library to repack.")
             return
 
-        is_vulkan = "vulkan" in fxdb.name.lower() or "vk" in fxdb.name.lower()
-        api = "vulkan" if is_vulkan else "dx12"
-        ext = "spv" if is_vulkan else "cso"
-        search_dir = paths.COMPILED_DIR / api / fxdb.stem
-
-        if not search_dir.exists():
-            messagebox.showwarning("Repack", f"No compiled shaders found in {search_dir}")
-            return
-
-        self.app.set_busy(True, f"Repacking {fxdb.name}...")
+        out_fxdb = paths.COMPILED_DIR / fxdb_path.name
+        self.app.set_busy(True, f"Repacking into {out_fxdb.name}...")
 
         def work():
-            parsed = fxdb_parser.parse_file(fxdb, decompress_bytecode=True)
+            fxdb = fxdb_parser.parse_file(fxdb_path, decompress_bytecode=True)
+            compiled_dir = paths.COMPILED_DIR
             replacements = {}
-            for f in search_dir.rglob(f"*.{ext}"):
-                st = f.parent.name.upper()
-                if st not in fxdb_parser.STAGES:
-                    continue
-                parts = f.stem.split("_", 1)
-                if len(parts) == 2 and parts[0].isdigit():
-                    idx = int(parts[0])
-                    recs = parsed.shaders.get(st, [])
-                    if 0 <= idx < len(recs):
-                        nb = f.read_bytes()
-                        if hashing.crc32(nb) != recs[idx].crc:
-                            replacements[(st, idx)] = nb
 
-            if not replacements:
-                return None, 0
+            for stage_name, list_records in fxdb.shaders.items():
+                for rec in list_records:
+                    patterns = [
+                        f"{rec.name}.spv",
+                        f"{rec.name}.cso",
+                        f"{rec.name}.{stage_name.lower()}_6_0.spv",
+                        f"{rec.name}.{stage_name.lower()}_6_0.cso",
+                        f"{stage_name.lower()}_{rec.index:08d}.spv",
+                        f"{stage_name.lower()}_{rec.index:08d}.cso",
+                    ]
+                    for pat in patterns:
+                        candidate = compiled_dir / pat
+                        if candidate.exists():
+                            new_bytes = candidate.read_bytes()
+                            replacements[(rec.stage, rec.index)] = new_bytes
+                            break
 
-            # Backup original
-            bdir = paths.ensure(fxdb.parent / "backups")
-            shutil.copy2(fxdb, bdir / f"{fxdb.name}.bak")
+            count = fxdb_parser.repack_fxdb(fxdb_path, out_fxdb, replacements=replacements)
+            return count, out_fxdb
 
-            out_path = fxdb.with_name(f"{fxdb.stem}_modified.fxdb")
-            res = fxdb_parser.inject_shaders(fxdb, out_path, replacements)
-            return res, len(replacements)
-
-        def done(tup):
+        def done(res):
             self.app.set_busy(False, "")
-            res, count = tup
-            if count == 0:
-                messagebox.showinfo("Repack", "No modified shaders were detected to inject.")
-            else:
-                messagebox.showinfo("Repack Complete", f"Successfully injected {count} shader(s) into:\n{res['output_path']}\n(Backup created in backups/)")
-                self.app.set_status(f"Repacked {count} shader(s) into {Path(res['output_path']).name}")
-                self._scan_modified_shaders(fxdb)
+            count, target_file = res
+            messagebox.showinfo("Repack Complete", f"Successfully repacked {count} modified shaders.\nOutput written to:\n{target_file}")
+            self.app.set_status(f"Repacked {count} shaders -> {target_file.name}")
+            self._detect_changes()
 
-        self.app.tasks.run(work, done=done, label=f"Repack {fxdb.name}")
+        self.app.tasks.run(work, done=done, label=f"Repack {fxdb_path.name}")

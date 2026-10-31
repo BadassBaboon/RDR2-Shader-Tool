@@ -52,7 +52,7 @@ def cmd_status(ctx: Ctx, args):
 
     lines = [
         "============================================================",
-        "  Red Dead Redemption 2 Shader Tool — System Status",
+        "  Red Dead Redemption 2 Shader Tool: System Status",
         "============================================================",
         f"Active API:        {cfg.active_api.upper()} (default for RDR2 is Vulkan)",
         f"Game Directory:    {cfg.game_dir} ({'Found' if cfg.game_dir.exists() else 'Missing'})",

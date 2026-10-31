@@ -1,4 +1,4 @@
-"""Custom reusable UI widgets for RDR2 Shader Tool."""
+"""Custom reusable UI widgets for RDR2 Shader Tool with RDR2 dark styling."""
 
 import tkinter as tk
 from tkinter import ttk
@@ -8,31 +8,41 @@ from . import theme as T
 
 
 class HeaderBand(tk.Frame):
-    """Top header band with title, page description, and right-aligned controls."""
+    """Top header band with RDR2 frontier styling, status line, and API toggle."""
 
     def __init__(self, parent, fonts: dict, title: str, subtitle: str, **kwargs):
-        super().__init__(parent, bg=T.BG_ALT, height=T.px(64), **kwargs)
+        super().__init__(parent, bg=T.BG_ALT, height=T.px(66), **kwargs)
         self.pack_propagate(False)
 
         left = tk.Frame(self, bg=T.BG_ALT)
         left.pack(side="left", padx=T.px(20), fill="y")
 
+        title_row = tk.Frame(left, bg=T.BG_ALT)
+        title_row.pack(anchor="w", pady=(T.px(10), 0))
+
+        # RDR2 Outlaw Crimson Tag
+        badge = tk.Label(
+            title_row, text=" RDR2 ", font=fonts["header_small"],
+            fg="#FFFFFF", bg=T.ACCENT, padx=T.px(4), pady=T.px(1)
+        )
+        badge.pack(side="left", padx=(0, T.px(10)))
+
         self.title_lbl = tk.Label(
-            left, text=title, font=fonts["title"],
+            title_row, text=title, font=fonts["brand"],
             fg=T.TEXT_MAIN, bg=T.BG_ALT, anchor="w"
         )
-        self.title_lbl.pack(anchor="w", pady=(T.px(8), 0))
+        self.title_lbl.pack(side="left")
 
         self.sub_lbl = tk.Label(
             left, text=subtitle, font=fonts["small"],
             fg=T.TEXT_MUTED, bg=T.BG_ALT, anchor="w"
         )
-        self.sub_lbl.pack(anchor="w")
+        self.sub_lbl.pack(anchor="w", pady=(T.px(2), 0))
 
         self.right = tk.Frame(self, bg=T.BG_ALT)
         self.right.pack(side="right", padx=T.px(20), fill="y")
 
-        # Bottom border line
+        # Bottom hairline border
         sep = tk.Frame(self, bg=T.BORDER, height=1)
         sep.pack(side="bottom", fill="x")
 
@@ -42,19 +52,20 @@ class HeaderBand(tk.Frame):
 
 
 class Segmented(tk.Frame):
-    """Pill-style segmented button switch (e.g. Vulkan / DX12)."""
+    """Pill-style segmented button switch for API selection."""
 
-    def __init__(self, parent, options: List[Tuple[str, str]], value: str, command: Optional[Callable[[str], None]] = None):
-        super().__init__(parent, bg=T.BG_PANEL, bd=1, relief="solid")
+    def __init__(self, parent, fonts: dict, options: List[Tuple[str, str]], value: str, command: Optional[Callable[[str], None]] = None):
+        super().__init__(parent, bg=T.BG_PANEL, bd=1, relief="solid", highlightthickness=0)
         self.options = options
         self.current = value
         self.command = command
+        self.fonts = fonts
         self.buttons = {}
 
         for val, label in options:
             btn = tk.Button(
-                self, text=label, font=tk.font.nametofont("TkDefaultFont"),
-                relief="flat", bd=0, padx=T.px(12), pady=T.px(4),
+                self, text=label, font=fonts["header_small"],
+                relief="flat", bd=0, padx=T.px(14), pady=T.px(5), cursor="hand2",
                 command=lambda v=val: self.select(v)
             )
             btn.pack(side="left", padx=1, pady=1)
@@ -72,36 +83,39 @@ class Segmented(tk.Frame):
     def _refresh(self):
         for val, btn in self.buttons.items():
             if val == self.current:
-                btn.config(bg=T.ACCENT, fg=T.ON_ACCENT, activebackground=T.ACCENT_HOVER, activeforeground=T.ON_ACCENT)
+                btn.config(bg=T.ACCENT, fg="#FFFFFF", activebackground=T.ACCENT_HOVER, activeforeground="#FFFFFF")
             else:
                 btn.config(bg=T.BG_PANEL, fg=T.TEXT_MUTED, activebackground=T.BG_ALT, activeforeground=T.TEXT_MAIN)
 
 
 class SearchEntry(tk.Frame):
-    """Search box with placeholder and clear button."""
+    """Clean search input with placeholder, clear button, and dark input styling."""
 
-    def __init__(self, parent, placeholder: str = "Search...", on_search: Optional[Callable[[str], None]] = None):
-        super().__init__(parent, bg=T.BG_PANEL, bd=1, relief="solid")
+    def __init__(self, parent, fonts: dict, placeholder: str = "Search shader name or 0xHash...", on_search: Optional[Callable[[str], None]] = None):
+        super().__init__(parent, bg=T.BG_INPUT, bd=1, relief="solid", highlightthickness=0)
         self.on_search = on_search
         self.placeholder = placeholder
+        self.fonts = fonts
 
         self.var = tk.StringVar()
         self.var.trace_add("write", lambda *args: self._on_change())
 
-        lbl = tk.Label(self, text="🔍", bg=T.BG_PANEL, fg=T.TEXT_DIM, font=("Segoe UI", T.px(9)))
-        lbl.pack(side="left", padx=(T.px(8), T.px(4)))
+        lbl = tk.Label(self, text="FILTER:", bg=T.BG_INPUT, fg=T.GOLD_MUTED, font=fonts["mono_small"])
+        lbl.pack(side="left", padx=(T.px(10), T.px(4)))
 
         self.entry = tk.Entry(
-            self, textvariable=self.var, bg=T.BG_PANEL, fg=T.TEXT_MAIN,
-            insertbackground=T.TEXT_MAIN, relief="flat", bd=0, font=("Segoe UI", T.px(10))
+            self, textvariable=self.var, bg=T.BG_INPUT, fg=T.TEXT_MAIN,
+            insertbackground=T.TEXT_MAIN, selectbackground=T.ACCENT_ACTIVE, selectforeground="#FFFFFF",
+            relief="flat", bd=0, font=fonts["body"]
         )
         self.entry.pack(side="left", fill="both", expand=True, padx=T.px(4), pady=T.px(6))
 
         self.clear_btn = tk.Button(
-            self, text="✕", bg=T.BG_PANEL, fg=T.TEXT_DIM, relief="flat", bd=0,
+            self, text="Clear", bg=T.BG_PANEL, fg=T.TEXT_MUTED, activebackground=T.BG_ALT, activeforeground=T.TEXT_MAIN,
+            font=fonts["small"], relief="flat", bd=0, padx=T.px(8), pady=T.px(2),
             command=self.clear, cursor="hand2"
         )
-        self.clear_btn.pack(side="right", padx=T.px(6))
+        self.clear_btn.pack(side="right", padx=T.px(6), pady=T.px(4))
 
     def _on_change(self):
         if self.on_search:
@@ -115,29 +129,30 @@ class SearchEntry(tk.Frame):
 
 
 class CodeViewer(tk.Frame):
-    """Scrollable code viewer/editor with line numbers."""
+    """Scrollable code viewer/editor with line numbers, dark styling, and TTK scrollbars."""
 
     def __init__(self, parent, fonts: dict, **kwargs):
-        super().__init__(parent, bg=T.BG, **kwargs)
+        super().__init__(parent, bg=T.BG_INPUT, bd=1, relief="solid", **kwargs)
 
         self.line_nums = tk.Text(
             self, width=5, bg=T.BG_ALT, fg=T.TEXT_DIM,
-            font=fonts["mono"], bd=0, relief="flat", state="disabled", padx=4
+            font=fonts["mono_small"], bd=0, relief="flat", state="disabled", padx=T.px(6)
         )
         self.line_nums.pack(side="left", fill="y")
 
+        sep = tk.Frame(self, bg=T.BORDER, width=1)
+        sep.pack(side="left", fill="y")
+
         self.text = tk.Text(
-            self, bg=T.BG, fg=T.TEXT_MAIN, insertbackground=T.TEXT_MAIN,
-            font=fonts["mono"], bd=0, relief="flat", wrap="none", padx=8
+            self, bg=T.BG_INPUT, fg=T.TEXT_MAIN, insertbackground=T.TEXT_MAIN,
+            selectbackground=T.ACCENT_ACTIVE, selectforeground="#FFFFFF",
+            font=fonts["mono"], bd=0, relief="flat", wrap="none", padx=T.px(8)
         )
         self.text.pack(side="left", fill="both", expand=True)
 
-        scroll_y = tk.Scrollbar(self, orient="vertical", command=self._scroll_both)
+        scroll_y = ttk.Scrollbar(self, orient="vertical", command=self._scroll_both)
         scroll_y.pack(side="right", fill="y")
         self.text.config(yscrollcommand=scroll_y.set)
-
-        scroll_x = tk.Scrollbar(parent, orient="horizontal", command=self.text.xview)
-        self.text.config(xscrollcommand=scroll_x.set)
 
         self.text.bind("<KeyRelease>", lambda e: self._update_line_numbers())
         self.text.bind("<MouseWheel>", lambda e: self._sync_lines())

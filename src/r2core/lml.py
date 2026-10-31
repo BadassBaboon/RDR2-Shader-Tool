@@ -114,3 +114,20 @@ def deploy_to_lml(
         "install_xml": str(install_xml_path),
         "deployed_files": deployed_files
     }
+
+
+def list_installed_mods(lml_dir: Optional[Path] = None) -> List[Dict[str, Union[str, bool]]]:
+    """List installed LML mods and check for shader replacements."""
+    target_lml = lml_dir or settings().lml_dir
+    mods = []
+    if target_lml and target_lml.exists():
+        for d in sorted(target_lml.iterdir()):
+            if d.is_dir() and (d / "install.xml").exists():
+                has_shaders = (d / "shaders_x64").exists()
+                mods.append({
+                    "name": d.name,
+                    "has_shaders": has_shaders,
+                    "path": str(d)
+                })
+    return mods
+
