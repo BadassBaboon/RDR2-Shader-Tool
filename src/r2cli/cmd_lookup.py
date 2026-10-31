@@ -116,6 +116,7 @@ def cmd_info(ctx: Ctx, args):
         "raw_size": len(rec.raw_bytecode),
         "is_compressed": rec.is_compressed,
         "effects": entry.effects,
+        "fxdb_path": str(entry.fxdb_path),
         "resources": [
             {
                 "name": r.name,
