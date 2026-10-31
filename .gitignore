@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.spec
+
+# IDE & Editor
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# User working and build output directories
+source/
+compiled/
+decompiled/
+lml_export/
+fxdb_files/
+.r2cache/
+*.tmp
+*.bak
+
+# Settings
+settings.ini
