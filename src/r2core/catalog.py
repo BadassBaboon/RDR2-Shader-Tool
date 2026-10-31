@@ -117,23 +117,58 @@ class Catalog:
         results = self.entries
         if api:
             results = [e for e in results if e.api.lower() == api.lower()]
-        if stage:
-            results = [e for e in results if e.stage.lower() == stage.lower()]
         if effect:
             eff_q = effect.lower()
             results = [e for e in results if any(eff_q in eff.lower() for eff in e.effects)]
 
-        if query:
-            q = query.strip().lower()
-            # Check if query is a hex hash
-            h = hashing.parse_hash(q)
-            if h is not None:
-                return [e for e in results if e.crc == h or (e.signature & 0xFFFFFFFF) == (h & 0xFFFFFFFF)]
+        q = (query or "").strip()
+        if not q:
+            if stage and stage.upper() != "ALL":
+                results = [e for e in results if e.stage.lower() == stage.lower()]
+            return results
 
-            # Text substring search in name and effects
-            results = [e for e in results if q in e.name.lower() or any(q in eff.lower() for eff in e.effects)]
+        q_lower = q.lower().strip("\"'#;,")
+        q_hex = q_lower[2:] if q_lower.startswith("0x") else q_lower
 
-        return results
+        # 1. Check exact hash or RenoDX dump filename
+        exact_hash = hashing.parse_hash(q_lower)
+
+        matched = []
+        for e in results:
+            # Exact 32-bit CRC or 64-bit signature match
+            if exact_hash is not None and (e.crc == exact_hash or (e.signature & 0xFFFFFFFF) == (exact_hash & 0xFFFFFFFF)):
+                matched.append(e)
+                continue
+
+            # Substring match in hex hashes (e.g. user typed partial hash '2ffb' or '0x2ffb')
+            if len(q_hex) >= 2:
+                if q_hex in e.crc_hex.lower() or q_hex in e.sig_hex.lower():
+                    matched.append(e)
+                    continue
+
+            # Substring match in shader name or RenoDX filename
+            if q_lower in e.name.lower() or q_lower in e.renodx_filename.lower():
+                matched.append(e)
+                continue
+
+            # Substring in effect names
+            if any(q_lower in eff.lower() for eff in e.effects):
+                matched.append(e)
+                continue
+
+            # Stage index notation (e.g. 'vs0', 'vs[0]', 'vs_0', '#0')
+            st_clean = q_lower.replace("[", "").replace("]", "").replace("_", "").replace(" ", "")
+            if st_clean == f"{e.stage.lower()}{e.index}":
+                matched.append(e)
+                continue
+
+        # If a stage filter was set, apply it unless it would discard all exact hash matches
+        if stage and stage.upper() != "ALL":
+            stage_matched = [e for e in matched if e.stage.lower() == stage.lower()]
+            if stage_matched or exact_hash is None:
+                matched = stage_matched
+
+        return matched
 
     def get_by_crc(self, crc: int, api: Optional[str] = None) -> List[CatalogEntry]:
         entries = self.by_crc.get(crc, [])

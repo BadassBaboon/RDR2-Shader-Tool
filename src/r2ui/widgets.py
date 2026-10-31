@@ -89,16 +89,17 @@ class Segmented(tk.Frame):
 
 
 class SearchEntry(tk.Frame):
-    """Clean search input with placeholder, clear button, and dark input styling."""
+    """Clean search input with placeholder, clear button, debounced typing, and dark input styling."""
 
     def __init__(self, parent, fonts: dict, placeholder: str = "Search shader name or 0xHash...", on_search: Optional[Callable[[str], None]] = None):
         super().__init__(parent, bg=T.BG_INPUT, bd=1, relief="solid", highlightthickness=0)
         self.on_search = on_search
         self.placeholder = placeholder
         self.fonts = fonts
+        self._after_id = None
 
         self.var = tk.StringVar()
-        self.var.trace_add("write", lambda *args: self._on_change())
+        self.var.trace_add("write", lambda *args: self._schedule_search())
 
         lbl = tk.Label(self, text="FILTER:", bg=T.BG_INPUT, fg=T.GOLD_MUTED, font=fonts["mono_small"])
         lbl.pack(side="left", padx=(T.px(10), T.px(4)))
@@ -109,6 +110,7 @@ class SearchEntry(tk.Frame):
             relief="flat", bd=0, font=fonts["body"]
         )
         self.entry.pack(side="left", fill="both", expand=True, padx=T.px(4), pady=T.px(6))
+        self.entry.bind("<Return>", lambda e: self._trigger_search())
 
         self.clear_btn = tk.Button(
             self, text="Clear", bg=T.BG_PANEL, fg=T.TEXT_MUTED, activebackground=T.BG_ALT, activeforeground=T.TEXT_MAIN,
@@ -117,15 +119,31 @@ class SearchEntry(tk.Frame):
         )
         self.clear_btn.pack(side="right", padx=T.px(6), pady=T.px(4))
 
-    def _on_change(self):
+    def _schedule_search(self):
+        # Debounce typing by 120ms to allow smooth typing without stutter
+        if self._after_id:
+            try:
+                self.after_cancel(self._after_id)
+            except Exception:
+                pass
+        self._after_id = self.after(120, self._trigger_search)
+
+    def _trigger_search(self):
+        if self._after_id:
+            try:
+                self.after_cancel(self._after_id)
+            except Exception:
+                pass
+            self._after_id = None
         if self.on_search:
-            self.on_search(self.var.get())
+            self.on_search(self.var.get().strip())
 
     def clear(self):
         self.var.set("")
+        self._trigger_search()
 
     def get(self) -> str:
-        return self.var.get()
+        return self.var.get().strip()
 
 
 class CodeViewer(tk.Frame):

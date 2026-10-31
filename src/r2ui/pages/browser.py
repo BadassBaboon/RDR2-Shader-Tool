@@ -177,6 +177,8 @@ class BrowserPage(tk.Frame):
         cat = catalog.get_default_catalog()
         entries = cat.find(query=renodx_hash_str, stage=st, api=self.app.active_api)
         if not entries:
+            entries = [e for e in cat.entries if e.stage == st and e.index == idx and e.api.lower() == self.app.active_api.lower()]
+        if not entries:
             return
 
         entry = entries[0]
