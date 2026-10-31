@@ -141,6 +141,38 @@ class TestBrowserUI(unittest.TestCase):
         self.page.stage_var.set("ALL")
         self.page.refresh()
 
+    def test_effect_filter_and_combination(self):
+        # 1. Filter by specific effect
+        self.page.effect_var.set("grass_batch_floating_veg_tess")
+        self.page.stage_var.set("ALL")
+        self.page.refresh()
+
+        displayed = self.page._displayed_entries
+        self.assertEqual(len(displayed), 20, "grass_batch_floating_veg_tess should contain 20 shaders")
+        self.assertTrue(all(any("grass_batch_floating_veg_tess" == eff.lower() for eff in e.effects) for e in displayed))
+
+        # 2. Combine with stage filter (HS)
+        self.page.stage_var.set("HS")
+        self.page.refresh()
+
+        hs_displayed = self.page._displayed_entries
+        self.assertEqual(len(hs_displayed), 2, "Should contain 2 HS shaders under grass_batch_floating_veg_tess")
+        hs_names = [e.name for e in hs_displayed]
+        self.assertIn("HS_Transform_AddWaterSurfaceDelta_Wrapped", hs_names)
+        self.assertIn("HS_Cascade_AddWaterSurfaceDelta_Wrapped", hs_names)
+
+        # 3. Combine with stage filter (VS)
+        self.page.stage_var.set("VS")
+        self.page.refresh()
+        vs_displayed = self.page._displayed_entries
+        self.assertEqual(len(vs_displayed), 4, "Should contain 4 VS shaders under grass_batch_floating_veg_tess")
+
+        # 4. Reset filters
+        self.page.effect_var.set("All Effects")
+        self.page.stage_var.set("ALL")
+        self.page.refresh()
+        self.assertGreater(len(self.page._displayed_entries), 13000)
+
     def test_app_footer_status_bar_alignment(self):
         from r2ui.app import App
         app = App()

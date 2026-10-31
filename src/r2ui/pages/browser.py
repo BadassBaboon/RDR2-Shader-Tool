@@ -48,9 +48,15 @@ class BrowserPage(tk.Frame):
 
         # Library filter
         self.lib_var = tk.StringVar(value="All Databases")
-        self.lib_menu = ttk.Combobox(toolbar, textvariable=self.lib_var, values=["All Databases"], width=24, state="readonly")
-        self.lib_menu.pack(side="left", padx=(0, T.px(10)), pady=T.px(6))
+        self.lib_menu = ttk.Combobox(toolbar, textvariable=self.lib_var, values=["All Databases"], width=18, state="readonly")
+        self.lib_menu.pack(side="left", padx=(0, T.px(8)), pady=T.px(6))
         self.lib_menu.bind("<<ComboboxSelected>>", lambda e: self._on_search(self.search.get()))
+
+        # Effect filter
+        self.effect_var = tk.StringVar(value="All Effects")
+        self.effect_menu = ttk.Combobox(toolbar, textvariable=self.effect_var, values=["All Effects"], width=22, state="readonly")
+        self.effect_menu.pack(side="left", padx=(0, T.px(10)), pady=T.px(6))
+        self.effect_menu.bind("<<ComboboxSelected>>", lambda e: self._on_search(self.search.get()))
 
         btn_reload = tk.Button(
             toolbar, text="Reload", bg=T.BG_PANEL, fg=T.TEXT_MAIN, activebackground=T.BG_ALT, activeforeground=T.TEXT_MAIN,
@@ -397,11 +403,24 @@ class BrowserPage(tk.Frame):
         if self.lib_var.get() not in libs:
             self.lib_var.set("All Databases")
 
+        # Update effect selector for current API
+        effs = ["All Effects"] + cat.list_effects(api)
+        self.effect_menu["values"] = effs
+        if self.effect_var.get() not in effs:
+            self.effect_var.set("All Effects")
+
         stage_filter = self.stage_var.get()
         st = None if stage_filter in ("ALL", "REPLACED") else stage_filter
-        lib_filter = None if self.lib_var.get() == "All Databases" else self.lib_var.get()
+        lib_filter = None if self.lib_var.get() in ("All Databases", "") else self.lib_var.get()
+        eff_filter = None if self.effect_var.get() in ("All Effects", "") else self.effect_var.get()
 
-        entries = cat.find(query=self.search.get(), stage=st, api=api, library=lib_filter)
+        entries = cat.find(
+            query=self.search.get(),
+            stage=st,
+            api=api,
+            library=lib_filter,
+            effect=eff_filter
+        )
         if stage_filter == "REPLACED":
             entries = [e for e in entries if replacements.is_entry_modified(e, mods)]
 
@@ -417,11 +436,12 @@ class BrowserPage(tk.Frame):
             ), tags=(row_tag,))
 
         lib_info = f" ({lib_filter})" if lib_filter else ""
+        eff_info = f" • Effect: {eff_filter}" if eff_filter else ""
         if stage_filter == "REPLACED":
-            self.app.set_status(f"Showing {len(entries):,} replaced/modified shaders ready to repack ({api.upper()})")
+            self.app.set_status(f"Showing {len(entries):,} replaced/modified shaders ready to repack ({api.upper()}){eff_info}")
         else:
             mod_str = f" • {len(mods)} modified ready to repack" if mods else ""
-            self.app.set_status(f"Loaded {len(entries):,} shaders for {api.upper()}{lib_info}{mod_str}")
+            self.app.set_status(f"Loaded {len(entries):,} shaders for {api.upper()}{lib_info}{eff_info}{mod_str}")
 
     def _on_search(self, query: str):
         self.refresh()

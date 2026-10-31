@@ -127,9 +127,13 @@ class Catalog:
         if library and library.upper() not in ("ALL", "ALL DATABASES"):
             lib_lower = library.lower()
             results = [e for e in results if lib_lower in Path(e.fxdb_path).name.lower()]
-        if effect:
+        if effect and effect.upper() not in ("ALL", "ALL EFFECTS"):
             eff_q = effect.lower()
-            results = [e for e in results if any(eff_q in eff.lower() for eff in e.effects)]
+            exact = [e for e in results if any(eff_q == eff.lower() for eff in e.effects)]
+            if exact:
+                results = exact
+            else:
+                results = [e for e in results if any(eff_q in eff.lower() for eff in e.effects)]
 
         q = (query or "").strip()
         if not q:
