@@ -35,10 +35,22 @@ class CatalogEntry:
     def sig_hex(self) -> str:
         return hashing.fmt64(self.signature)
 
+    @property
+    def renodx_hash(self) -> str:
+        """32-bit RenoDX shader hash matching RenoDX OSD and live replacement."""
+        return self.crc_hex
+
+    @property
+    def renodx_filename(self) -> str:
+        """Expected filename when dumped by RenoDX."""
+        return hashing.renodx_dump_filename(self.crc, self.stage, self.api)
+
     def to_dict(self) -> dict:
         d = asdict(self)
         d["crc_hex"] = self.crc_hex
         d["sig_hex"] = self.sig_hex
+        d["renodx_hash"] = self.renodx_hash
+        d["renodx_filename"] = self.renodx_filename
         return d
 
 
@@ -167,7 +179,7 @@ class Catalog:
 
 
 def get_default_catalog(force_rebuild: bool = False) -> Catalog:
-    """Load or build the catalog from RDR2_Shaders dump folder."""
+    """Load or build the catalog from user dump folder, fxdb_files/, or shaders_dump/."""
     if not force_rebuild:
         cached = Catalog.load_cache()
         if cached:
@@ -175,14 +187,25 @@ def get_default_catalog(force_rebuild: bool = False) -> Catalog:
 
     cat = Catalog()
     dump_dir = Path(settings().get("Paths", "rdr2_shaders_dump", str(paths.DEFAULT_DUMP_DIR)))
-    fxdb_dir = dump_dir / "fxdb"
 
-    if fxdb_dir.exists():
-        for f in fxdb_dir.glob("*.fxdb"):
-            try:
-                cat.add_fxdb(f)
-            except Exception as e:
-                print(f"Warning: Failed to index {f.name}: {e}")
+    # Collect search directories for .fxdb files
+    search_dirs = [
+        dump_dir / "fxdb",
+        dump_dir,
+        paths.FXDB_FILES_DIR,
+        paths.SHADERS_DUMP_DIR,
+    ]
+
+    indexed_paths = set()
+    for s_dir in search_dirs:
+        if s_dir and s_dir.exists():
+            for f in sorted(s_dir.glob("*.fxdb")):
+                if f.resolve() not in indexed_paths:
+                    try:
+                        cat.add_fxdb(f)
+                        indexed_paths.add(f.resolve())
+                    except Exception as e:
+                        print(f"Warning: Failed to index {f.name}: {e}")
 
     cat.save_cache()
     return cat

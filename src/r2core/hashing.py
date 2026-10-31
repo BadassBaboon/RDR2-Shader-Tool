@@ -36,8 +36,44 @@ def joaat_case(s: str) -> int:
 
 
 def crc32(data: bytes) -> int:
-    """Compute standard IEEE 802.3 CRC32 (RenoDX convention)."""
+    """Compute standard IEEE 802.3 CRC32 (identical to RenoDX ComputeCRC32)."""
     return zlib.crc32(data) & 0xFFFFFFFF
+
+
+def renodx_hash(data: bytes) -> int:
+    """Compute 32-bit RenoDX shader hash (standard CRC32 over uncompressed bytecode)."""
+    return crc32(data)
+
+
+def renodx_hash_hex(data: bytes) -> str:
+    """Format 32-bit RenoDX shader hash as uppercase hex: 0x12345678."""
+    return fmt(crc32(data))
+
+
+def renodx_dump_filename(shader_hash: int, stage: str, api: str) -> str:
+    """Generate expected RenoDX shader dump filename based on API and stage.
+    
+    DX12:   0x12345678.ps_6_0.cso / 0x12345678.vs_6_0.cso
+    Vulkan: 0x12345678.frag.spv / 0x12345678.vert.spv
+    """
+    h_str = fmt(shader_hash)
+    st = str(stage).upper()
+    api_clean = str(api).lower()
+
+    if api_clean == "dx12":
+        stage_map = {
+            "VS": "vs_6_0", "PS": "ps_6_0", "CS": "cs_6_0",
+            "GS": "gs_6_0", "DS": "ds_6_0", "HS": "hs_6_0"
+        }
+        abbr = stage_map.get(st, "ps_6_0")
+        return f"{h_str}.{abbr}.cso"
+    else:
+        stage_map = {
+            "VS": "vert", "PS": "frag", "CS": "comp",
+            "GS": "geom", "DS": "tese", "HS": "tesc"
+        }
+        abbr = stage_map.get(st, "spv")
+        return f"{h_str}.{abbr}.spv"
 
 
 def fnv1a_64(data: bytes) -> int:
@@ -59,11 +95,17 @@ def fmt64(h: int) -> str:
     return f"0x{h & 0xFFFFFFFFFFFFFFFF:016X}"
 
 
+_RENODX_FILE_RE = re.compile(r"^(?:0x)?([0-9a-fA-F]{8})(?:\.[a-zA-Z0-9_]+)+$")
+
+
 def parse_hash(text: str) -> Optional[int]:
-    """Parse '0x4C793B07' or '4c793b07' into an integer."""
+    """Parse '0x4C793B07', '4c793b07', or RenoDX filename '0x4C793B07.ps_6_0.cso' into an integer."""
     if not text:
         return None
     s = str(text).strip()
+    m_reno = _RENODX_FILE_RE.match(s)
+    if m_reno:
+        return int(m_reno.group(1), 16)
     m32 = _HASH32_RE.match(s)
     if m32:
         return int(m32.group(1), 16)

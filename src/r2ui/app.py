@@ -50,7 +50,7 @@ class App:
         active_lib = "sga_vulkan_final.fxdb" if self.active_api == "vulkan" else "sga_win32_60_final.fxdb"
         self.header = W.HeaderBand(
             self.root, self.fonts,
-            title="RED DEAD REDEMPTION II",
+            title="SHADER TOOL",
             subtitle=f"Active API: {self.active_api.upper()} ({active_lib})"
         )
         self.header.pack(side="top", fill="x")
@@ -157,7 +157,7 @@ class App:
         active_lib = "sga_vulkan_final.fxdb" if self.active_api == "vulkan" else "sga_win32_60_final.fxdb"
         for pid, label, desc in PAGES:
             if pid == page_id:
-                self.header.set_title("RED DEAD REDEMPTION II", f"{label}: {desc} ({active_lib})")
+                self.header.set_title("SHADER TOOL", f"{label}: {desc} ({active_lib})")
                 break
 
         if hasattr(page, "refresh"):
@@ -188,7 +188,7 @@ class App:
         count = len(cat.entries)
         active_lib = "sga_vulkan_final.fxdb" if self.active_api == "vulkan" else "sga_win32_60_final.fxdb"
         self.set_status(f"Catalog indexed: {count} shaders available across Vulkan and DX12")
-        self.header.set_title("RED DEAD REDEMPTION II", f"Active API: {self.active_api.upper()} ({active_lib}) • {count} shaders loaded")
+        self.header.set_title("SHADER TOOL", f"Active API: {self.active_api.upper()} ({active_lib}) • {count} shaders loaded")
         if self.current_page_name == "browser":
             self.pages["browser"].refresh()
 

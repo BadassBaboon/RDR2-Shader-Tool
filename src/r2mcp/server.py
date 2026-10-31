@@ -18,9 +18,9 @@ PROTOCOLS = ("2025-06-18", "2025-03-26", "2024-11-05")
 MAX_TEXT = 60_000
 
 INSTRUCTIONS = (
-    "Red Dead Redemption 2 shader management toolkit (Vulkan SPIR-V & DirectX 12 DXIL). "
-    "Shaders are keyed by 0xCRC32 or name; default API is Vulkan. "
-    "Use find / info to explore shaders, registers, and cbuffers; "
+    "Red Dead Redemption 2 shader management toolkit (Vulkan SPIR-V and DirectX 12 DXIL). "
+    "Shaders are keyed by RenoDX hash (0xCRC32) or name; default API is Vulkan. "
+    "Use find / info to explore shaders, RenoDX hashes, registers, and cbuffers; "
     "decompile / compile to convert between binaries and HLSL/GLSL; "
     "unpack / repack to modify .fxdb libraries; "
     "lml to deploy directly to Lenny's Mod Loader without modifying .rpf files."

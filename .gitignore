@@ -1,4 +1,4 @@
-# Python
+# Python bytecode & cache
 __pycache__/
 *.py[cod]
 *$py.class
@@ -16,9 +16,21 @@ compiled/
 decompiled/
 lml_export/
 fxdb_files/
+shaders_dump/
+dump/
 .r2cache/
 *.tmp
 *.bak
 
-# Settings
+# Local user configuration
 settings.ini
+
+# Game dump files and binary archives (Never ship dumped game shaders in git)
+*.fxdb
+*.bin
+*.sps
+*.list
+*.d3d12warmupcache*
+*.vkwarmupcache*
+*.vkpipelinecache*
+*.d3d12pipelinecache*

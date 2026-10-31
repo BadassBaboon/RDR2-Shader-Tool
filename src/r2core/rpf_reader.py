@@ -28,12 +28,12 @@ def extract_from_shaders_rpf(
             "extracted_files": []
         }
 
-    # Use dotnet probe helper if compiled
-    probe_dir = Path(r"C:\Users\BadassBaboon\.gemini\antigravity\brain\bafd99db-def3-4ccb-9196-558b09323486\scratch\rpf_probe")
+    # Use dotnet probe helper if present in tools/rpf_probe
+    probe_dir = paths.ROOT / "tools" / "rpf_probe"
     if not probe_dir.exists():
         return {
             "ok": False,
-            "error": "rpf_probe helper not available",
+            "error": "Direct RPF extractor is not configured. Place extracted .fxdb files into fxdb_files/ or shaders_dump/.",
             "extracted_files": []
         }
 

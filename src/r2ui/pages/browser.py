@@ -1,4 +1,4 @@
-"""Shader Browser page: Search, inspect, view registers/cbuffers, and decompile."""
+"""Shader Browser page: Search, inspect, view registers/cbuffers, RenoDX interop, and decompile."""
 
 import tkinter as tk
 from tkinter import messagebox, ttk
@@ -24,7 +24,7 @@ class BrowserPage(tk.Frame):
         toolbar = tk.Frame(self, bg=T.BG_ALT, height=T.px(48))
         toolbar.pack(fill="x", padx=T.px(10), pady=(T.px(10), 0))
 
-        self.search = SearchEntry(toolbar, self.fonts, placeholder="Search shader name or 0xHash...", on_search=self._on_search)
+        self.search = SearchEntry(toolbar, self.fonts, placeholder="Search shader name, RenoDX 0xHash, or dump filename...", on_search=self._on_search)
         self.search.pack(side="left", fill="x", expand=True, padx=(0, T.px(10)), pady=T.px(6))
 
         # Stage filter
@@ -46,21 +46,21 @@ class BrowserPage(tk.Frame):
 
         # Left: TreeView list of shaders
         left_frame = tk.Frame(paned, bg=T.BG_INPUT)
-        paned.add(left_frame, minsize=T.px(480))
+        paned.add(left_frame, minsize=T.px(490))
 
-        cols = ("stage", "index", "name", "crc", "size")
+        cols = ("stage", "index", "name", "renodx_hash", "size")
         self.tree = ttk.Treeview(left_frame, columns=cols, show="headings", selectmode="browse")
         self.tree.heading("stage", text="Stage")
         self.tree.heading("index", text="#")
         self.tree.heading("name", text="Shader Name")
-        self.tree.heading("crc", text="CRC32")
+        self.tree.heading("renodx_hash", text="RenoDX Hash")
         self.tree.heading("size", text="Size")
 
         self.tree.column("stage", width=T.px(55), anchor="center")
         self.tree.column("index", width=T.px(50), anchor="center")
-        self.tree.column("name", width=T.px(240), anchor="w")
-        self.tree.column("crc", width=T.px(90), anchor="center")
-        self.tree.column("size", width=T.px(75), anchor="e")
+        self.tree.column("name", width=T.px(230), anchor="w")
+        self.tree.column("renodx_hash", width=T.px(105), anchor="center")
+        self.tree.column("size", width=T.px(70), anchor="e")
 
         # Alternating row colors
         self.tree.tag_configure("odd", background=T.BG_INPUT)
@@ -75,7 +75,7 @@ class BrowserPage(tk.Frame):
 
         # Right: Detail Inspector
         right_frame = tk.Frame(paned, bg=T.BG_ALT)
-        paned.add(right_frame, minsize=T.px(520))
+        paned.add(right_frame, minsize=T.px(530))
 
         # Inspector Title Bar
         header_bar = tk.Frame(right_frame, bg=T.BG_ALT)
@@ -97,7 +97,7 @@ class BrowserPage(tk.Frame):
             font=self.fonts["header_small"], relief="flat", padx=T.px(14), pady=T.px(5),
             command=self._decompile_selected, state="disabled", cursor="hand2"
         )
-        self.btn_decompile.pack(side="left", padx=(0, T.px(8)))
+        self.btn_decompile.pack(side="left", padx=(0, T.px(6)))
 
         self.btn_view_source = tk.Button(
             act_bar, text="Open in Editor", bg=T.BG_PANEL, fg=T.TEXT_MAIN,
@@ -105,7 +105,23 @@ class BrowserPage(tk.Frame):
             font=self.fonts["header_small"], relief="flat", padx=T.px(12), pady=T.px(5),
             command=self._open_in_editor, state="disabled", cursor="hand2"
         )
-        self.btn_view_source.pack(side="left")
+        self.btn_view_source.pack(side="left", padx=(0, T.px(6)))
+
+        self.btn_copy_hash = tk.Button(
+            act_bar, text="Copy RenoDX Hash", bg=T.BG_PANEL, fg=T.GOLD,
+            activebackground=T.BG_ALT, activeforeground=T.GOLD,
+            font=self.fonts["small"], relief="flat", padx=T.px(10), pady=T.px(5),
+            command=self._copy_renodx_hash, state="disabled", cursor="hand2"
+        )
+        self.btn_copy_hash.pack(side="left", padx=(0, T.px(4)))
+
+        self.btn_copy_name = tk.Button(
+            act_bar, text="Copy Dump Name", bg=T.BG_PANEL, fg=T.TEXT_MUTED,
+            activebackground=T.BG_ALT, activeforeground=T.TEXT_MAIN,
+            font=self.fonts["small"], relief="flat", padx=T.px(10), pady=T.px(5),
+            command=self._copy_renodx_filename, state="disabled", cursor="hand2"
+        )
+        self.btn_copy_name.pack(side="left")
 
         # Detail text widget (Registers, CBuffers, Reflection)
         detail_container = tk.Frame(right_frame, bg=T.BG_INPUT, bd=1, relief="solid")
@@ -141,7 +157,7 @@ class BrowserPage(tk.Frame):
         for idx, e in enumerate(entries[:400]):
             row_tag = "even" if idx % 2 == 0 else "odd"
             self.tree.insert("", "end", iid=f"{e.stage}_{e.index}_{e.crc}", values=(
-                e.stage, e.index, e.name, e.crc_hex, f"{e.byte_size:,} B"
+                e.stage, e.index, e.name, e.renodx_hash, f"{e.byte_size:,} B"
             ), tags=(row_tag,))
 
         self.app.set_status(f"Loaded {len(entries)} shaders for {api.upper()}")
@@ -155,11 +171,11 @@ class BrowserPage(tk.Frame):
             return
 
         item = self.tree.item(sel[0])
-        st, idx_str, _, crc_hex, _ = item["values"]
+        st, idx_str, _, renodx_hash_str, _ = item["values"]
         idx = int(idx_str)
 
         cat = catalog.get_default_catalog()
-        entries = cat.find(query=crc_hex, stage=st, api=self.app.active_api)
+        entries = cat.find(query=renodx_hash_str, stage=st, api=self.app.active_api)
         if not entries:
             return
 
@@ -168,6 +184,8 @@ class BrowserPage(tk.Frame):
 
         self.btn_decompile.config(state="normal")
         self.btn_view_source.config(state="normal")
+        self.btn_copy_hash.config(state="normal")
+        self.btn_copy_name.config(state="normal")
 
         self.detail_header.config(text=f"{entry.name}  [{entry.stage}:{entry.index}]  ({entry.api.upper()})")
 
@@ -185,7 +203,12 @@ class BrowserPage(tk.Frame):
                 else:
                     self.detail_text.insert("end", txt)
 
-            append("SHADER METADATA\n", "title")
+            append("RENODX SHADER INTEROP\n", "title")
+            append("----------------------------------------------------------------------\n", "meta_key")
+            append("RenoDX Hash: ", "meta_key"); append(f"{entry.renodx_hash}\n", "cb_head")
+            append("Dump Name:   ", "meta_key"); append(f"{entry.renodx_filename}\n", "var_type")
+
+            append("\nSHADER METADATA\n", "title")
             append("----------------------------------------------------------------------\n", "meta_key")
             append("Name:        ", "meta_key"); append(f"{rec.name}\n", "meta_val")
             append("Stage:       ", "meta_key"); append(f"{rec.stage} (Index {rec.index})\n", "meta_val")
@@ -217,6 +240,18 @@ class BrowserPage(tk.Frame):
             self.detail_text.delete("1.0", "end")
             self.detail_text.insert("1.0", f"Error loading reflection metadata:\n{ex}")
             self.detail_text.config(state="disabled")
+
+    def _copy_renodx_hash(self):
+        if self.selected_entry:
+            self.clipboard_clear()
+            self.clipboard_append(self.selected_entry.renodx_hash)
+            self.app.set_status(f"Copied RenoDX hash {self.selected_entry.renodx_hash} to clipboard")
+
+    def _copy_renodx_filename(self):
+        if self.selected_entry:
+            self.clipboard_clear()
+            self.clipboard_append(self.selected_entry.renodx_filename)
+            self.app.set_status(f"Copied RenoDX dump name {self.selected_entry.renodx_filename} to clipboard")
 
     def _decompile_selected(self):
         if not self.selected_entry:

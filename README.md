@@ -2,7 +2,7 @@
 
 Shader decompiler, compiler, and modding toolkit for Red Dead Redemption 2 on PC.
 
-Supports both Vulkan (the game's default API) and DirectX 12. Decompiles compiled shaders into HLSL or GLSL, injects modified bytecode back into RAGE `SGD1` (`.fxdb`) databases, and deploys directly to Lenny's Mod Loader (LML).
+Supports both Vulkan (the game's default API) and DirectX 12. Decompiles compiled shaders into HLSL or GLSL, injects modified bytecode back into RAGE `SGD1` (`.fxdb`) databases, maps RenoDX shader hashes directly to game shaders, and deploys directly to Lenny's Mod Loader (LML).
 
 ---
 
@@ -16,9 +16,29 @@ Supports both Vulkan (the game's default API) and DirectX 12. Decompiles compile
 | Container format | RAGE `SGD1` (`0x31444753`) | RAGE `SGD1` (`0x31444753`) |
 | Bytecode format | Khronos SPIR-V (`0x07230203`) | Microsoft DXBC / DXIL (`DXBC` chunk container) |
 | On-disk compression | Oodle Kraken (`0xDCE7` 12-byte header) | Uncompressed raw bytecode |
+| RenoDX hash formula | CRC32 of uncompressed SPIR-V bytecode | CRC32 of uncompressed DXBC bytecode |
 | Decompiler | `compilers/spirv-cross.exe` | `compilers/decomp.exe` (RenoDX) or `dxil-spirv` |
 | Compiler | `compilers/dxc.exe -spirv` or `glslc.exe` | `compilers/dxc.exe -T <stage>_6_0` |
-| Deployment target | `G:\Red Dead Redemption 2\lml\<ModName>\shaders_x64\0xFEEB1B85.bin` | `G:\Red Dead Redemption 2\lml\<ModName>\shaders_x64\0x8068F4F9.bin` |
+| Deployment target | `<GamePath>\lml\<ModName>\shaders_x64\0xFEEB1B85.bin` | `<GamePath>\lml\<ModName>\shaders_x64\0x8068F4F9.bin` |
+
+---
+
+## RenoDX Workflow & Shader Cross-Referencing
+
+RenoDX uses standard IEEE 802.3 CRC32 over uncompressed shader bytecode (`renodx::utils::hash::ComputeCRC32`) to identify shaders in memory. In RDR2, this corresponds to the uncompressed SPIR-V bytecode (Vulkan) and the uncompressed DXBC container (DX12).
+
+### RenoDX to LML Modding Cycle
+1. **Identify in Game**: In game, identify what shader draws an object or effect using RenoDX devkit or the ReShade overlay. Note the 32-bit hash (for example, `0x2FFB1EF2`).
+2. **Search in Shader Tool**: Paste the hash (or the RenoDX dump filename, such as `0x2FFB1EF2.vert.spv` or `0x59C1A819.ps_6_0.cso`) into the search bar in the **Shaders** tab, or run:
+   ```bash
+   r2sm find 0x2FFB1EF2
+   ```
+3. **Inspect Reflection**: View the shader's constant buffers, matrix bindings, and parameter names.
+4. **Decompile**: Click **Decompile to HLSL** or run `r2sm decompile <name>`.
+5. **Edit Math**: Open the generated `.hlsl` file in your preferred editor. Add custom lighting math, color grading, or post-processing adjustments.
+6. **Compile**: Save the file. If Watch Mode is enabled in the GUI, the tool compiles it automatically.
+7. **Repack**: Repack the modified shader into the target `.fxdb` container.
+8. **Deploy to LML**: Click **Deploy Mod to Lenny's Mod Loader** or run `r2sm lml deploy`. Launch RDR2 to test the change in-game.
 
 ---
 
@@ -60,13 +80,16 @@ Check toolchain and environment status:
 ## CLI Reference
 
 ### 1. Catalog and Reflection
-Search the indexed database by name, CRC32, stage, or API:
+Search the indexed database by name, RenoDX hash, CRC32, stage, or API:
 ```bash
+# Search by RenoDX hash (from in-game overlay or RenoDX dump)
+r2sm find 0x2FFB1EF2
+
+# Search by RenoDX dump filename
+r2sm find 0x2FFB1EF2.vert.spv
+
 # Search for water shaders in Vulkan
 r2sm find water -s ps -a vulkan
-
-# Search for a shader by 32-bit CRC hash
-r2sm find 0xC03F4446
 
 # Print constant buffers, register slots, and variable layouts
 r2sm info VS_Rage_TransformPosCpvNrmTex_Wrapped -a vulkan
@@ -107,10 +130,10 @@ Inject recompiled bytecode into the `.fxdb` container:
 r2sm inject --fxdb sga_vulkan_final.fxdb --stage ps --index 0 --input compiled/ps_00000000.spv
 
 # Batch unpack all shaders into directories grouped by stage
-r2sm unpack E:/RealityVAddon/RDR2_Shaders/fxdb/sga_vulkan_final.fxdb
+r2sm unpack shaders_dump/sga_vulkan_final.fxdb
 
 # Batch repack all modified files from compiled/ into a target .fxdb
-r2sm repack E:/RealityVAddon/RDR2_Shaders/fxdb/sga_vulkan_final.fxdb
+r2sm repack shaders_dump/sga_vulkan_final.fxdb
 ```
 
 ### 5. Lenny's Mod Loader (LML) Deployment
@@ -122,17 +145,6 @@ r2sm lml deploy compiled/sga_vulkan_final.fxdb -n RealityV_Shaders
 # Inspect currently active LML mods
 r2sm lml status
 ```
-
----
-
-## Modding Workflow
-
-1. **Locate the Shader**: Open the tool or run `r2sm find <keyword>` to find the shader associated with the material, lighting pass, or post-process pass you want to change.
-2. **Decompile**: Run `r2sm decompile <name>` or click **Decompile to HLSL** in the GUI. The tool writes the source file with annotated constant buffer structures to `source/`.
-3. **Modify Code**: Open the `.hlsl` file in your editor. Add or modify equations in the pixel shader entry point.
-4. **Compile**: Run `r2sm compile <file>` or save the file in your editor while Watch Mode is active in the GUI.
-5. **Inject and Repack**: Click **Repack Modified Shaders** in the FXDB Builder tab, or run `r2sm repack`.
-6. **Deploy to LML**: Click **Deploy Mod to Lenny's Mod Loader** or run `r2sm lml deploy`. Launch Red Dead Redemption 2.
 
 ---
 
@@ -149,7 +161,7 @@ To configure in Claude Desktop or Antigravity, add the following entry to your `
   "mcpServers": {
     "rdr2-shader-tool": {
       "command": "python",
-      "args": ["E:\\RealityVAddon\\RDR2-Shader-Tool\\r2mcp.py"]
+      "args": ["<PathToRepository>\\r2mcp.py"]
     }
   }
 }
@@ -157,8 +169,8 @@ To configure in Claude Desktop or Antigravity, add the following entry to your `
 
 Registered tools:
 - `r2sm_status`: Check toolchain and game path configuration.
-- `r2sm_find`: Search shader catalog by keyword, stage, or CRC32.
-- `r2sm_info`: Inspect shader parameters, register bindings, and cbuffer layouts.
+- `r2sm_find`: Search shader catalog by keyword, RenoDX hash, stage, or CRC32.
+- `r2sm_info`: Inspect shader parameters, RenoDX dump names, register bindings, and cbuffer layouts.
 - `r2sm_effects`: List effect groups.
 - `r2sm_decompile`: Decompile a shader to HLSL or GLSL.
 - `r2sm_compile`: Recompile source code to SPIR-V or DXIL bytecode.
@@ -178,6 +190,7 @@ Registered tools:
 ├── compiled/                     # Recompiled .spv and .cso binary blobs
 ├── decompiled/                   # Unpacked loose shaders and disassemblies
 ├── fxdb_files/                   # Working .fxdb shader databases
+├── shaders_dump/                 # Optional local extracted shader dump directory
 ├── src/
 │   ├── r2core/                   # SGD1 parser, Oodle compression, compilers, LML VFS
 │   ├── r2cli/                    # Command-line subcommands
