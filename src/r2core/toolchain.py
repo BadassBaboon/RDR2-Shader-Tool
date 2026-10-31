@@ -20,6 +20,7 @@ _KNOWN_TOOLS = {
     "glslang": "glslangValidator.exe",
     # DX12
     "decomp": "decomp.exe",
+    "cmd_decompiler": "cmd_Decompiler.exe",
     "dxc": "dxc.exe",
     "dxil_spirv": "dxil-spirv.exe",
     "dxbc2dxil": "dxbc2dxil.exe",

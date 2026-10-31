@@ -1,11 +1,12 @@
 """Shader Browser page: Search, inspect, view registers/cbuffers, RenoDX interop, and decompile."""
 
+from pathlib import Path
 import tkinter as tk
 from tkinter import messagebox, ttk
 from typing import Optional
 
-from r2core import catalog, decompile, hashing, paths, settings
-from r2core.fxdb_parser import parse_file
+from r2core import catalog, decompile, hashing, paths, replacements, settings
+from r2core.fxdb_parser import get_cached_fxdb, parse_file
 from .. import theme as T
 from ..widgets import CodeViewer, SearchEntry
 
@@ -17,6 +18,7 @@ class BrowserPage(tk.Frame):
         self.fonts = fonts
         self.selected_entry: Optional[catalog.CatalogEntry] = None
         self._displayed_entries: list = []
+        self.modified_map: dict = {}
         self.sort_col = "index"
         self.sort_desc = False
         self.col_titles = {
@@ -39,8 +41,8 @@ class BrowserPage(tk.Frame):
 
         # Stage filter
         self.stage_var = tk.StringVar(value="ALL")
-        stages = ["ALL", "VS", "PS", "CS", "GS", "DS", "HS"]
-        stage_menu = ttk.Combobox(toolbar, textvariable=self.stage_var, values=stages, width=7, state="readonly")
+        stages = ["ALL", "REPLACED", "VS", "PS", "CS", "GS", "DS", "HS"]
+        stage_menu = ttk.Combobox(toolbar, textvariable=self.stage_var, values=stages, width=10, state="readonly")
         stage_menu.pack(side="left", padx=(0, T.px(10)), pady=T.px(6))
         stage_menu.bind("<<ComboboxSelected>>", lambda e: self._on_search(self.search.get()))
 
@@ -87,9 +89,10 @@ class BrowserPage(tk.Frame):
         self.tree.column("renodx_hash", width=T.px(105), anchor="center")
         self.tree.column("size", width=T.px(70), anchor="e")
 
-        # Alternating row colors
+        # Alternating row colors and modified row highlight
         self.tree.tag_configure("odd", background=T.BG_INPUT)
         self.tree.tag_configure("even", background=T.BG_ALT)
+        self.tree.tag_configure("modified", background="#2C2619", foreground=T.GOLD, font=self.fonts["mono_bold"])
 
         tree_scroll = ttk.Scrollbar(left_frame, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=tree_scroll.set)
@@ -384,6 +387,10 @@ class BrowserPage(tk.Frame):
         cat = catalog.get_default_catalog()
         api = self.app.active_api
 
+        # Scan for modified / replaced shaders for active API
+        mods = replacements.scan_modified_shaders(api, cat=cat)
+        self.modified_map = mods
+
         # Update library selector for current API
         libs = ["All Databases"] + cat.get_libraries(api)
         self.lib_menu["values"] = libs
@@ -391,21 +398,35 @@ class BrowserPage(tk.Frame):
             self.lib_var.set("All Databases")
 
         stage_filter = self.stage_var.get()
-        st = None if stage_filter == "ALL" else stage_filter
+        st = None if stage_filter in ("ALL", "REPLACED") else stage_filter
         lib_filter = None if self.lib_var.get() == "All Databases" else self.lib_var.get()
 
         entries = cat.find(query=self.search.get(), stage=st, api=api, library=lib_filter)
+        if stage_filter == "REPLACED":
+            entries = [e for e in entries if (e.stage, e.index) in mods]
+
         entries = self._sort_entries(entries)
         self._displayed_entries = entries
 
         for idx, e in enumerate(entries):
-            row_tag = "even" if idx % 2 == 0 else "odd"
+            is_mod = (e.stage, e.index) in mods
+            if is_mod:
+                row_tag = "modified"
+                st_text = f"{e.stage} [MOD]"
+            else:
+                row_tag = "even" if idx % 2 == 0 else "odd"
+                st_text = e.stage
+
             self.tree.insert("", "end", iid=str(idx), values=(
-                e.stage, e.index, e.name, e.renodx_hash, f"{e.byte_size:,} B"
+                st_text, e.index, e.name, e.renodx_hash, f"{e.byte_size:,} B"
             ), tags=(row_tag,))
 
         lib_info = f" ({lib_filter})" if lib_filter else ""
-        self.app.set_status(f"Loaded {len(entries):,} shaders for {api.upper()}{lib_info}")
+        if stage_filter == "REPLACED":
+            self.app.set_status(f"Showing {len(entries):,} replaced/modified shaders ready to repack ({api.upper()})")
+        else:
+            mod_str = f" • {len(mods)} modified ready to repack" if mods else ""
+            self.app.set_status(f"Loaded {len(entries):,} shaders for {api.upper()}{lib_info}{mod_str}")
 
     def _on_search(self, query: str):
         self.refresh()
@@ -430,10 +451,9 @@ class BrowserPage(tk.Frame):
 
         self.detail_header.config(text=f"{entry.name}  [{entry.stage}:{entry.index}]  ({entry.api.upper()})")
 
-        # Load reflection
+        # Load reflection (fast in-memory cache, no full-file re-parse)
         try:
-            from pathlib import Path
-            fxdb = parse_file(entry.fxdb_path, decompress_bytecode=True)
+            fxdb = get_cached_fxdb(entry.fxdb_path, decompress_bytecode=False)
             rec = fxdb.shaders[entry.stage][entry.index]
 
             self.detail_text.config(state="normal")
@@ -444,6 +464,15 @@ class BrowserPage(tk.Frame):
                     self.detail_text.insert("end", txt, tag)
                 else:
                     self.detail_text.insert("end", txt)
+
+            mod_info = self.modified_map.get((entry.stage, entry.index))
+            if mod_info:
+                append("MODIFIED SHADER READY FOR REPACK / INJECTION\n", "title")
+                append("----------------------------------------------------------------------\n", "meta_key")
+                append("Status:      ", "meta_key"); append("MODIFIED (Replacement Compiled)\n", "cb_head")
+                append("Stock CRC:   ", "meta_key"); append(f"{mod_info['old_crc_hex']}\n", "meta_val")
+                append("New CRC:     ", "meta_key"); append(f"{mod_info['new_crc_hex']}\n", "cb_head")
+                append("Source File: ", "meta_key"); append(f"{mod_info['rel_path']}\n\n", "var_type")
 
             append("RENODX SHADER INTEROP\n", "title")
             append("----------------------------------------------------------------------\n", "meta_key")
@@ -462,7 +491,7 @@ class BrowserPage(tk.Frame):
             append("API:         ", "meta_key"); append(f"{entry.api.upper()}\n", "meta_val")
             append("CRC32:       ", "meta_key"); append(f"{entry.crc_hex}\n", "meta_val")
             append("Signature:   ", "meta_key"); append(f"{entry.sig_hex}\n", "meta_val")
-            append("Size:        ", "meta_key"); append(f"{len(rec.bytecode):,} B (Raw disk: {len(rec.raw_bytecode):,} B, Compressed: {rec.is_compressed})\n", "meta_val")
+            append("Size:        ", "meta_key"); append(f"{entry.byte_size:,} B (Raw disk: {len(rec.raw_bytecode):,} B, Compressed: {rec.is_compressed})\n", "meta_val")
             append("Effects:     ", "meta_key"); append(f"{', '.join(entry.effects) or 'None'}\n", "meta_val")
 
             append("\nCONSTANT BUFFERS & REGISTERS (RAGE SGA v1 Reflection)\n", "title")
@@ -508,8 +537,9 @@ class BrowserPage(tk.Frame):
         self.app.set_busy(True, f"Decompiling {entry.name}...")
 
         def work():
-            fxdb = parse_file(entry.fxdb_path, decompress_bytecode=True)
+            fxdb = get_cached_fxdb(entry.fxdb_path, decompress_bytecode=False)
             rec = fxdb.shaders[entry.stage][entry.index]
+            rec.get_decompressed_bytecode()
             res = decompile.decompile_shader(rec, api=entry.api, target_lang="hlsl")
             return res, rec
 

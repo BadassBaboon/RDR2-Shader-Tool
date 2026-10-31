@@ -30,6 +30,7 @@ class CompileResult:
     error: str = ""
     warnings: str = ""
     steps: List[str] = None
+    output_path: Optional[Path] = None
 
 
 def detect_stage(path_or_name: Union[str, Path], content: Optional[str] = None) -> Tuple[str, str]:
@@ -232,3 +233,50 @@ def compile_shader(
         return compile_to_vulkan(source_file_or_code, stage=stage, entry_point=entry_point, defines=defines)
     else:
         return compile_to_dx12(source_file_or_code, stage=stage, entry_point=entry_point, defines=defines)
+
+
+def compile_shader_file(
+    source_file: Union[str, Path],
+    api: Optional[str] = None,
+    out_dir: Optional[Path] = None,
+    stage: Optional[str] = None,
+    entry_point: str = "main",
+    optimize: bool = False
+) -> CompileResult:
+    """Compile a shader source file from disk and write compiled bytecode to output directory."""
+    src = Path(source_file).resolve()
+    if not src.exists():
+        return CompileResult(
+            ok=False, target_api=api or "vulkan", stage=stage or "ps", profile="",
+            bytecode=b"", error=f"Source file not found: {src}"
+        )
+
+    target_api = api
+    if not target_api:
+        src_str = str(src).lower()
+        if "vulkan" in src_str:
+            target_api = "vulkan"
+        elif "dx12" in src_str:
+            target_api = "dx12"
+        else:
+            from .settings import settings
+            target_api = settings().active_api
+
+    res = compile_shader(src, target_api=target_api, stage=stage, entry_point=entry_point)
+    if not res.ok:
+        return res
+
+    ext = "spv" if target_api.lower() == "vulkan" else "cso"
+    dest_dir = out_dir or (paths.COMPILED_DIR / target_api.lower())
+    paths.ensure(dest_dir)
+
+    stem = src.stem
+    for suff in (".vs_6_0", ".ps_6_0", ".cs_6_0", ".gs_6_0", ".ds_6_0", ".hs_6_0"):
+        if stem.lower().endswith(suff):
+            stem = stem[:-len(suff)]
+            break
+
+    out_file = dest_dir / f"{stem}.{ext}"
+    out_file.write_bytes(res.bytecode)
+    res.output_path = out_file
+    return res

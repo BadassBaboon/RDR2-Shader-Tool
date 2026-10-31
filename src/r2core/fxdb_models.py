@@ -159,12 +159,23 @@ class ShaderRecord:
     crc: int = 0               # CRC32 of decompressed bytecode
 
     @property
+    def crc32(self) -> int:
+        return self.crc
+
+    @property
     def is_spirv(self) -> bool:
         return len(self.bytecode) >= 4 and self.bytecode[:4] == b'\x03\x02#\x07'
 
     @property
     def is_dxbc(self) -> bool:
         return len(self.bytecode) >= 4 and self.bytecode[:4] == b'DXBC'
+
+    def get_decompressed_bytecode(self) -> bytes:
+        """Return decompressed bytecode, decompressing on demand if still compressed."""
+        if self.is_compressed and (not self.bytecode or self.bytecode == self.raw_bytecode):
+            from . import oodle
+            self.bytecode = oodle.decompress(self.raw_bytecode)
+        return self.bytecode
 
 
 @dataclass

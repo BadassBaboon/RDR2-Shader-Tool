@@ -164,49 +164,33 @@ class BuilderPage(tk.Frame):
         if not fxdb_path or not fxdb_path.exists():
             return
 
-        def work():
-            fxdb = fxdb_parser.parse_file(fxdb_path, decompress_bytecode=True)
-            modified = []
-            compiled_dir = paths.COMPILED_DIR
+        api = "vulkan" if "vulkan" in fxdb_path.name.lower() or "feeb1b85" in fxdb_path.name.lower() else "dx12"
 
-            for stage_name, list_records in fxdb.shaders.items():
-                for rec in list_records:
-                    patterns = [
-                        f"{rec.name}.spv",
-                        f"{rec.name}.cso",
-                        f"{rec.name}.{stage_name.lower()}_6_0.spv",
-                        f"{rec.name}.{stage_name.lower()}_6_0.cso",
-                        f"{stage_name.lower()}_{rec.index:08d}.spv",
-                        f"{stage_name.lower()}_{rec.index:08d}.cso",
-                    ]
-                    for pat in patterns:
-                        candidate = compiled_dir / pat
-                        if candidate.exists():
-                            new_bytes = candidate.read_bytes()
-                            new_crc = hashing.crc32(new_bytes)
-                            if new_crc != rec.crc32:
-                                modified.append({
-                                    "stage": rec.stage,
-                                    "index": rec.index,
-                                    "name": rec.name,
-                                    "old_crc": f"0x{rec.crc32:08X}",
-                                    "new_crc": f"0x{new_crc:08X}",
-                                    "file": str(candidate.relative_to(paths.ROOT_DIR)),
-                                    "path": candidate,
-                                    "data": new_bytes,
-                                })
-                            break
-            return modified
+        def work():
+            from r2core import replacements
+            mods = replacements.scan_modified_shaders(api)
+            fxdb = fxdb_parser.get_cached_fxdb(fxdb_path, decompress_bytecode=False)
+            fxdb_slots = set()
+            for st, records in fxdb.shaders.items():
+                for r in records:
+                    fxdb_slots.add((st, r.index))
+
+            result = []
+            for slot, m in mods.items():
+                if slot in fxdb_slots:
+                    result.append(m)
+            return result
 
         def done(modified_list):
             for idx, m in enumerate(modified_list):
                 row_tag = "even" if idx % 2 == 0 else "odd"
                 self.tree.insert("", "end", values=(
-                    m["stage"], m["index"], m["name"], m["old_crc"], m["new_crc"], m["file"]
+                    m["stage"], m["index"], m["name"], m["old_crc_hex"], m["new_crc_hex"], m["rel_path"]
                 ), tags=(row_tag,))
 
             count = len(modified_list)
-            self.app.set_status(f"Found {count} modified shaders ready to repack")
+            if self.app.current_page_name == "builder":
+                self.app.set_status(f"Found {count} modified shaders ready to repack")
 
         self.app.tasks.run(work, done=done, label="Detecting modified shaders")
 
@@ -247,32 +231,14 @@ class BuilderPage(tk.Frame):
             messagebox.showinfo("Select Library", "Select an FXDB library to repack.")
             return
 
+        api = "vulkan" if "vulkan" in fxdb_path.name.lower() or "feeb1b85" in fxdb_path.name.lower() else "dx12"
         out_fxdb = paths.COMPILED_DIR / fxdb_path.name
         self.app.set_busy(True, f"Repacking into {out_fxdb.name}...")
 
         def work():
-            fxdb = fxdb_parser.parse_file(fxdb_path, decompress_bytecode=True)
-            compiled_dir = paths.COMPILED_DIR
-            replacements = {}
-
-            for stage_name, list_records in fxdb.shaders.items():
-                for rec in list_records:
-                    patterns = [
-                        f"{rec.name}.spv",
-                        f"{rec.name}.cso",
-                        f"{rec.name}.{stage_name.lower()}_6_0.spv",
-                        f"{rec.name}.{stage_name.lower()}_6_0.cso",
-                        f"{stage_name.lower()}_{rec.index:08d}.spv",
-                        f"{stage_name.lower()}_{rec.index:08d}.cso",
-                    ]
-                    for pat in patterns:
-                        candidate = compiled_dir / pat
-                        if candidate.exists():
-                            new_bytes = candidate.read_bytes()
-                            replacements[(rec.stage, rec.index)] = new_bytes
-                            break
-
-            count = fxdb_parser.repack_fxdb(fxdb_path, out_fxdb, replacements=replacements)
+            from r2core import replacements
+            repl_map = replacements.get_replacements_for_fxdb(fxdb_path, api=api)
+            count = fxdb_parser.repack_fxdb(fxdb_path, out_fxdb, replacements=repl_map)
             return count, out_fxdb
 
         def done(res):
@@ -281,5 +247,7 @@ class BuilderPage(tk.Frame):
             messagebox.showinfo("Repack Complete", f"Successfully repacked {count} modified shaders.\nOutput written to:\n{target_file}")
             self.app.set_status(f"Repacked {count} shaders -> {target_file.name}")
             self._detect_changes()
+            if "browser" in self.app.pages:
+                self.app.pages["browser"].refresh()
 
         self.app.tasks.run(work, done=done, label=f"Repack {fxdb_path.name}")

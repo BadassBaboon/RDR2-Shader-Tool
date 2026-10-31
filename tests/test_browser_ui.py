@@ -119,6 +119,38 @@ class TestBrowserUI(unittest.TestCase):
 
         guide_win.destroy()
 
+    def test_replaced_filter_and_tag(self):
+        # Set filter to REPLACED
+        self.page.stage_var.set("REPLACED")
+        self.page.refresh()
+        displayed = self.page._displayed_entries
+        self.assertGreaterEqual(len(displayed), 1, "Should show at least 1 modified shader")
+        names = [e.name for e in displayed]
+        self.assertIn("VS_Clear_Wrapped", names)
+
+        # Verify row tag in treeview is "modified"
+        first_item = self.page.tree.get_children()[0]
+        tags = self.page.tree.item(first_item, "tags")
+        self.assertIn("modified", tags)
+        values = self.page.tree.item(first_item, "values")
+        self.assertIn("[MOD]", values[0])
+
+        # Reset filter
+        self.page.stage_var.set("ALL")
+        self.page.refresh()
+
+    def test_app_footer_status_bar_alignment(self):
+        from r2ui.app import App
+        app = App()
+        app.root.withdraw()
+        try:
+            # Check packing info of info_lbl
+            pinfo = app.info_lbl.pack_info()
+            self.assertEqual(pinfo["side"], "right", "info_lbl should be snapped to side='right'")
+            self.assertIn("16", str(pinfo["padx"]), "info_lbl should have right margin padding")
+        finally:
+            app.root.destroy()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -336,11 +336,38 @@ class FXDBParser:
         return fxdb
 
 
+_fxdb_cache: Dict[str, FXDBFile] = {}
+
+
+def clear_fxdb_cache():
+    """Clear in-memory parsed FXDB file cache."""
+    _fxdb_cache.clear()
+
+
+def get_cached_fxdb(filepath: Union[str, Path], decompress_bytecode: bool = False) -> FXDBFile:
+    """Return in-memory cached FXDB structure, parsing once without bytecode decompression."""
+    key = str(Path(filepath).resolve())
+    if key not in _fxdb_cache:
+        _fxdb_cache[key] = parse_file(key, decompress_bytecode=decompress_bytecode)
+    return _fxdb_cache[key]
+
+
 def parse_file(filepath: Union[str, Path], decompress_bytecode: bool = True) -> FXDBFile:
     """Parse an FXDB file from disk."""
     with open(filepath, "rb") as f:
         parser = FXDBParser(f, decompress_bytecode=decompress_bytecode)
         return parser.parse(filepath=str(filepath))
+
+
+def repack_fxdb(
+    source_fxdb_path: Union[str, Path],
+    output_fxdb_path: Union[str, Path],
+    replacements: Dict[Tuple[str, int], bytes]
+) -> int:
+    """Repack modified shaders back into FXDB library. Returns count of repacked shaders."""
+    res = inject_shaders(source_fxdb_path, output_fxdb_path, replacements)
+    clear_fxdb_cache()
+    return int(res.get("injected_count", 0))
 
 
 def inject_shaders(

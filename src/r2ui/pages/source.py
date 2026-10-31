@@ -194,10 +194,12 @@ class SourcePage(tk.Frame):
         def loop():
             while self.watch_active:
                 time.sleep(1.0)
-                if not self.watch_var.get() or not self.current_file or not self.current_file.exists():
-                    continue
-
                 try:
+                    if not self.winfo_exists():
+                        break
+                    if not self.watch_var.get() or not self.current_file or not self.current_file.exists():
+                        continue
+
                     mtime = self.current_file.stat().st_mtime
                     if mtime > self.last_mtime:
                         self.last_mtime = mtime
@@ -206,7 +208,7 @@ class SourcePage(tk.Frame):
                         self.after(0, lambda c=content: self.editor.set_content(c))
                         self.after(0, self._compile_current)
                 except Exception:
-                    pass
+                    break
 
         t = threading.Thread(target=loop, daemon=True)
         t.start()

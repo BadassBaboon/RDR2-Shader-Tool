@@ -97,10 +97,10 @@ def decompile_spirv(
 def decompile_dx12(
     cso_bytes: bytes,
     stage: Optional[str] = None,
-    preferred_method: str = "decomp",
+    preferred_method: str = "auto",
     disassemble: bool = True
 ) -> DecompileResult:
-    """Decompile DirectX 12 DXIL/DXBC bytecode using RenoDX decomp.exe or dxil-spirv."""
+    """Decompile DirectX 12 DXBC/DXIL bytecode using SPIR-V pipeline, 3Dmigoto, or decomp.exe."""
     tc = get_toolchain()
     steps = []
 
@@ -109,52 +109,92 @@ def decompile_dx12(
         cso_file = tmp_path / "shader.cso"
         cso_file.write_bytes(cso_bytes)
 
-        # 1. Disassemble using dxc -dumpbin
+        # 1. Disassemble: try dxc -dumpbin first, fallback to fxc /dumpbin
         disasm_text = ""
         if disassemble:
             dxc_res = tc.run("dxc", ["-dumpbin", cso_file], cwd=tmp_path)
-            if dxc_res.ok:
+            if dxc_res.ok and dxc_res.stdout.strip():
                 disasm_text = dxc_res.stdout
                 steps.append("dxc -dumpbin")
+            else:
+                fxc_res = tc.run("fxc", ["/dumpbin", str(cso_file)], cwd=tmp_path)
+                if fxc_res.ok and fxc_res.stdout.strip():
+                    disasm_text = fxc_res.stdout
+                    steps.append("fxc /dumpbin")
 
+        is_dxbc = len(cso_bytes) >= 4 and cso_bytes[:4] == b"DXBC"
+        has_dxil_chunk = b"DXIL" in cso_bytes or b"ILDB" in cso_bytes
+
+        # Pipeline A: DXBC -> dxbc2dxil -> dxil-spirv -> spirv-cross
+        if is_dxbc and not has_dxil_chunk:
+            dxil_file = tmp_path / "converted.dxil"
+            conv_res = tc.run("dxbc2dxil", [cso_file, "-o", dxil_file], cwd=paths.COMPILERS_DIR)
+            if conv_res.ok and dxil_file.exists():
+                steps.append("dxbc2dxil")
+                spv_file = tmp_path / "from_dxil.spv"
+                spv_res = tc.run("dxil_spirv", [dxil_file, "--output", spv_file, "--dead-code-eliminate"], cwd=paths.COMPILERS_DIR)
+                if spv_res.ok and spv_file.exists():
+                    steps.append("dxil-spirv")
+                    cross_res = tc.run("spirv_cross", [str(spv_file), "--hlsl", "--shader-model", "60"], cwd=paths.COMPILERS_DIR)
+                    if cross_res.ok and cross_res.stdout.strip():
+                        steps.append("spirv-cross")
+                        return DecompileResult(
+                            ok=True,
+                            method="dxbc2dxil+spirv-cross",
+                            source_code=cross_res.stdout,
+                            disassembly=disasm_text,
+                            steps=steps
+                        )
+
+        # Pipeline B: Direct DXIL -> dxil-spirv -> spirv-cross
+        if has_dxil_chunk or not is_dxbc:
+            spv_file = tmp_path / "from_dxil.spv"
+            spv_res = tc.run("dxil_spirv", [cso_file, "--output", spv_file, "--dead-code-eliminate"], cwd=paths.COMPILERS_DIR)
+            if spv_res.ok and spv_file.exists():
+                steps.append("dxil-spirv")
+                cross_res = tc.run("spirv_cross", [str(spv_file), "--hlsl", "--shader-model", "60"], cwd=paths.COMPILERS_DIR)
+                if cross_res.ok and cross_res.stdout.strip():
+                    steps.append("spirv-cross")
+                    return DecompileResult(
+                        ok=True,
+                        method="dxil-spirv+spirv-cross",
+                        source_code=cross_res.stdout,
+                        disassembly=disasm_text,
+                        steps=steps
+                    )
+
+        # Pipeline C: 3Dmigoto cmd_Decompiler.exe -D (rock solid for DXBC)
+        cmd_dec_res = tc.run("cmd_decompiler", ["-D", cso_file], cwd=tmp_path)
+        hlsl_3d = cso_file.with_suffix(".hlsl")
+        if hlsl_3d.exists() and hlsl_3d.stat().st_size > 0:
+            steps.append("cmd_Decompiler -D (3Dmigoto)")
+            return DecompileResult(
+                ok=True,
+                method="3dmigoto",
+                source_code=hlsl_3d.read_text(encoding="utf-8", errors="replace"),
+                disassembly=disasm_text,
+                steps=steps
+            )
+
+        # Pipeline D: decomp.exe (RenoDX)
         out_hlsl = tmp_path / "decompiled.hlsl"
+        decomp_res = tc.run("decomp", [cso_file, out_hlsl], cwd=paths.COMPILERS_DIR)
+        if decomp_res.ok and out_hlsl.exists() and out_hlsl.stat().st_size > 0:
+            steps.append("decomp.exe")
+            return DecompileResult(
+                ok=True,
+                method="decomp.exe",
+                source_code=out_hlsl.read_text(encoding="utf-8", errors="replace"),
+                disassembly=disasm_text,
+                steps=steps
+            )
 
-        # 2. Primary Route: decomp.exe (RenoDX)
-        if preferred_method == "decomp":
-            decomp_res = tc.run("decomp", [cso_file, out_hlsl], cwd=paths.COMPILERS_DIR)
-            if decomp_res.ok and out_hlsl.exists() and out_hlsl.stat().st_size > 0:
-                steps.append("decomp.exe")
-                return DecompileResult(
-                    ok=True,
-                    method="decomp.exe",
-                    source_code=out_hlsl.read_text(encoding="utf-8", errors="replace"),
-                    disassembly=disasm_text,
-                    steps=steps
-                )
-
-        # 3. Fallback Route: dxil-spirv + spirv-cross
-        spv_out = tmp_path / "from_dxil.spv"
-        dxil_res = tc.run("dxil_spirv", [cso_file, "-o", spv_out], cwd=tmp_path)
-        if dxil_res.ok and spv_out.exists():
-            steps.append("dxil-spirv")
-            cross_res = tc.run("spirv_cross", [str(spv_out), "--hlsl", "--shader-model", "60"], cwd=tmp_path)
-            if cross_res.ok:
-                steps.append("spirv-cross")
-                return DecompileResult(
-                    ok=True,
-                    method="dxil-spirv+spirv-cross",
-                    source_code=cross_res.stdout,
-                    disassembly=disasm_text,
-                    steps=steps
-                )
-
-        # Both failed
         return DecompileResult(
             ok=False,
-            method="decomp",
+            method="dx12-decompile",
             source_code="",
             disassembly=disasm_text,
-            error="Both decomp.exe and dxil-spirv failed to decompile the shader.",
+            error="All decompiler routes (dxbc2dxil, dxil-spirv, 3Dmigoto, decomp.exe) failed for this shader.",
             steps=steps
         )
 

@@ -73,27 +73,27 @@ class App:
         self.footer.pack(side="bottom", fill="x")
         self.footer.pack_propagate(False)
 
-        self.status_lbl = tk.Label(
-            self.footer, text="Ready", font=self.fonts["small"],
-            fg=T.TEXT_MUTED, bg=T.BG_ALT, anchor="w", padx=T.px(12)
-        )
-        self.status_lbl.pack(side="left", fill="y")
-
-        # Game & LML status middle label
+        # Game & LML status label (permanently snapped to bottom-right corner)
         game_ok = self.cfg.game_dir.exists()
         lml_ok = (self.cfg.game_dir / "lml").exists()
         info_str = f"Game: {'Found' if game_ok else 'Not Set'}  |  LML: {'Ready' if lml_ok else 'Not Installed'}"
         self.info_lbl = tk.Label(
             self.footer, text=info_str, font=self.fonts["mono_small"],
-            fg=T.TEXT_DIM, bg=T.BG_ALT, anchor="center"
+            fg=T.TEXT_DIM, bg=T.BG_ALT, anchor="e"
         )
-        self.info_lbl.pack(side="left", expand=True)
+        self.info_lbl.pack(side="right", padx=(T.px(8), T.px(16)), fill="y")
 
         self.busy_lbl = tk.Label(
             self.footer, text="", font=self.fonts["small"],
-            fg=T.GOLD, bg=T.BG_ALT, anchor="e", padx=T.px(12)
+            fg=T.GOLD, bg=T.BG_ALT, anchor="e", padx=T.px(8)
         )
         self.busy_lbl.pack(side="right", fill="y")
+
+        self.status_lbl = tk.Label(
+            self.footer, text="Ready", font=self.fonts["small"],
+            fg=T.TEXT_MUTED, bg=T.BG_ALT, anchor="w", padx=T.px(12)
+        )
+        self.status_lbl.pack(side="left", fill="both", expand=True)
 
         # 3. Main Middle Area (Sidebar Navigation + Page Container)
         middle = tk.Frame(self.root, bg=T.BG)
@@ -157,7 +157,13 @@ class App:
         active_lib = "sga_vulkan_final.fxdb" if self.active_api == "vulkan" else "sga_win32_60_final.fxdb"
         for pid, label, desc in PAGES:
             if pid == page_id:
-                self.header.set_title("SHADER TOOL", f"{label}: {desc} ({active_lib})")
+                if pid == "browser":
+                    cat = catalog.get_default_catalog()
+                    total_count = len(cat.entries)
+                    api_count = len(cat.by_api.get(self.active_api, []))
+                    self.header.set_title("SHADER TOOL", f"Active API: {self.active_api.upper()} ({active_lib}) • {api_count:,} shaders ({total_count:,} total)")
+                else:
+                    self.header.set_title("SHADER TOOL", f"{label}: {desc} ({active_lib})")
                 break
 
         if hasattr(page, "refresh"):
@@ -169,7 +175,10 @@ class App:
         self.active_api = api.lower()
         self.cfg.active_api = self.active_api
         active_lib = "sga_vulkan_final.fxdb" if self.active_api == "vulkan" else "sga_win32_60_final.fxdb"
-        self.set_status(f"Active API: {self.active_api.upper()} ({active_lib})")
+        cat = catalog.get_default_catalog()
+        total_count = len(cat.entries)
+        api_count = len(cat.by_api.get(self.active_api, []))
+        self.header.set_title("SHADER TOOL", f"Active API: {self.active_api.upper()} ({active_lib}) • {api_count:,} shaders ({total_count:,} total)")
 
         cur_page = self.pages.get(self.current_page_name)
         if cur_page and hasattr(cur_page, "refresh"):
@@ -185,10 +194,10 @@ class App:
         pass
 
     def _catalog_ready(self, cat):
-        count = len(cat.entries)
+        total_count = len(cat.entries)
+        api_count = len(cat.by_api.get(self.active_api, []))
         active_lib = "sga_vulkan_final.fxdb" if self.active_api == "vulkan" else "sga_win32_60_final.fxdb"
-        self.set_status(f"Catalog indexed: {count} shaders available across Vulkan and DX12")
-        self.header.set_title("SHADER TOOL", f"Active API: {self.active_api.upper()} ({active_lib}) • {count} shaders loaded")
+        self.header.set_title("SHADER TOOL", f"Active API: {self.active_api.upper()} ({active_lib}) • {api_count:,} shaders ({total_count:,} total)")
         if self.current_page_name == "browser":
             self.pages["browser"].refresh()
 
