@@ -1,4 +1,8 @@
-# Python bytecode & cache
+# Build outputs & binaries
+bin/
+tools/
+*.dll
+*.exe
 __pycache__/
 *.py[cod]
 *$py.class

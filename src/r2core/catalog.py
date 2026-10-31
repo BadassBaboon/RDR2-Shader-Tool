@@ -73,7 +73,7 @@ class Catalog:
         # Infer API from path or argument
         if api is None:
             name_lower = p.name.lower()
-            if "vulkan" in name_lower or "vk" in name_lower:
+            if "vulkan" in name_lower or "vk" in name_lower or "feeb1b85" in name_lower or "a8c90d00" in name_lower:
                 api = "vulkan"
             else:
                 api = "dx12"
@@ -113,10 +113,20 @@ class Catalog:
                 for e in effs:
                     self.by_effect.setdefault(e.lower(), []).append(entry)
 
-    def find(self, query: str = "", stage: Optional[str] = None, api: Optional[str] = None, effect: Optional[str] = None) -> List[CatalogEntry]:
+    def find(
+        self,
+        query: str = "",
+        stage: Optional[str] = None,
+        api: Optional[str] = None,
+        effect: Optional[str] = None,
+        library: Optional[str] = None
+    ) -> List[CatalogEntry]:
         results = self.entries
         if api:
             results = [e for e in results if e.api.lower() == api.lower()]
+        if library and library.upper() not in ("ALL", "ALL DATABASES"):
+            lib_lower = library.lower()
+            results = [e for e in results if lib_lower in Path(e.fxdb_path).name.lower()]
         if effect:
             eff_q = effect.lower()
             results = [e for e in results if any(eff_q in eff.lower() for eff in e.effects)]
@@ -193,6 +203,13 @@ class Catalog:
             return sorted(effs)
         return sorted(self.by_effect.keys())
 
+    def get_libraries(self, api: Optional[str] = None) -> List[str]:
+        """Return unique FXDB filenames present in the catalog for the given API."""
+        from . import rpf_reader
+        entries = self.by_api.get(api.lower(), []) if api else self.entries
+        libs = sorted({rpf_reader.resolve_fxdb_name(Path(e.fxdb_path).name) for e in entries})
+        return libs
+
     def save_cache(self, cache_file: Optional[Path] = None):
         target = cache_file or (paths.CACHE_DIR / "catalog.pkl")
         paths.ensure(target.parent)
@@ -215,15 +232,11 @@ class Catalog:
 
 def get_default_catalog(force_rebuild: bool = False) -> Catalog:
     """Load or build the catalog from user dump folder, fxdb_files/, or shaders_dump/."""
-    if not force_rebuild:
-        cached = Catalog.load_cache()
-        if cached:
-            return cached
+    from . import rpf_reader
 
-    cat = Catalog()
     dump_dir = Path(settings().get("Paths", "rdr2_shaders_dump", str(paths.DEFAULT_DUMP_DIR)))
 
-    # Collect search directories for .fxdb files
+    # Collect search directories for shader files
     search_dirs = [
         dump_dir / "fxdb",
         dump_dir,
@@ -231,14 +244,41 @@ def get_default_catalog(force_rebuild: bool = False) -> Catalog:
         paths.SHADERS_DUMP_DIR,
     ]
 
-    indexed_paths = set()
+    # Collect existing .fxdb and known .bin files on disk
+    disk_files: List[Path] = []
     for s_dir in search_dirs:
         if s_dir and s_dir.exists():
             for f in sorted(s_dir.glob("*.fxdb")):
-                if f.resolve() not in indexed_paths:
+                disk_files.append(f)
+            for f in sorted(s_dir.glob("*.bin")):
+                if f.name.lower() in rpf_reader.HASH_TO_FXDB:
+                    disk_files.append(f)
+
+    cache_file = paths.CACHE_DIR / "catalog.pkl"
+    if not force_rebuild and cache_file.exists():
+        cached = Catalog.load_cache()
+        if cached and cached.loaded_files:
+            cache_mtime = cache_file.stat().st_mtime
+            cached_names = {rpf_reader.resolve_fxdb_name(Path(p).name).lower() for p in cached.loaded_files}
+            valid_disk_files = [f for f in disk_files if not f.name.lower().startswith("sga_win32_50")]
+            disk_names = {rpf_reader.resolve_fxdb_name(f.name).lower() for f in valid_disk_files}
+            if disk_names.issubset(cached_names):
+                if all(f.stat().st_mtime <= cache_mtime for f in valid_disk_files if rpf_reader.resolve_fxdb_name(f.name).lower() in cached_names):
+                    return cached
+
+    cat = Catalog()
+    indexed_names = set()
+    for s_dir in search_dirs:
+        if s_dir and s_dir.exists():
+            candidate_files = list(sorted(s_dir.glob("*.fxdb"))) + [
+                f for f in sorted(s_dir.glob("*.bin")) if f.name.lower() in rpf_reader.HASH_TO_FXDB
+            ]
+            for f in candidate_files:
+                canonical = rpf_reader.resolve_fxdb_name(f.name).lower()
+                if canonical not in indexed_names:
                     try:
                         cat.add_fxdb(f)
-                        indexed_paths.add(f.resolve())
+                        indexed_names.add(canonical)
                     except Exception as e:
                         print(f"Warning: Failed to index {f.name}: {e}")
 

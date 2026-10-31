@@ -98,10 +98,10 @@ def detect_dump_dir() -> Path:
     if SHADERS_DUMP_DIR.exists():
         return SHADERS_DUMP_DIR
 
-    # 2. Check local sibling or common development dump path
-    known_dump = Path(r"E:\RealityVAddon\RDR2_Shaders")
-    if known_dump.exists():
-        return known_dump
+    # 2. Check sibling directory named RDR2_Shaders
+    sibling_dump = ROOT.parent / "RDR2_Shaders"
+    if sibling_dump.exists():
+        return sibling_dump
 
     return SHADERS_DUMP_DIR
 

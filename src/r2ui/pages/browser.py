@@ -16,6 +16,16 @@ class BrowserPage(tk.Frame):
         self.app = app
         self.fonts = fonts
         self.selected_entry: Optional[catalog.CatalogEntry] = None
+        self._displayed_entries: list = []
+        self.sort_col = "index"
+        self.sort_desc = False
+        self.col_titles = {
+            "stage": "Stage",
+            "index": "#",
+            "name": "Shader Name",
+            "renodx_hash": "RenoDX Hash",
+            "size": "Size"
+        }
 
         self._build_ui()
 
@@ -34,11 +44,29 @@ class BrowserPage(tk.Frame):
         stage_menu.pack(side="left", padx=(0, T.px(10)), pady=T.px(6))
         stage_menu.bind("<<ComboboxSelected>>", lambda e: self._on_search(self.search.get()))
 
+        # Library filter
+        self.lib_var = tk.StringVar(value="All Databases")
+        self.lib_menu = ttk.Combobox(toolbar, textvariable=self.lib_var, values=["All Databases"], width=24, state="readonly")
+        self.lib_menu.pack(side="left", padx=(0, T.px(10)), pady=T.px(6))
+        self.lib_menu.bind("<<ComboboxSelected>>", lambda e: self._on_search(self.search.get()))
+
         btn_reload = tk.Button(
             toolbar, text="Reload", bg=T.BG_PANEL, fg=T.TEXT_MAIN, activebackground=T.BG_ALT, activeforeground=T.TEXT_MAIN,
-            font=self.fonts["header_small"], relief="flat", padx=T.px(12), pady=T.px(4), command=self.refresh, cursor="hand2"
+            font=self.fonts["header_small"], relief="flat", padx=T.px(10), pady=T.px(4), command=self.refresh, cursor="hand2"
         )
-        btn_reload.pack(side="right", padx=T.px(6), pady=T.px(6))
+        btn_reload.pack(side="right", padx=T.px(4), pady=T.px(6))
+
+        btn_folder = tk.Button(
+            toolbar, text="Folder...", bg=T.BG_PANEL, fg=T.TEXT_MAIN, activebackground=T.BG_ALT, activeforeground=T.TEXT_MAIN,
+            font=self.fonts["header_small"], relief="flat", padx=T.px(10), pady=T.px(4), command=self._change_dump_folder, cursor="hand2"
+        )
+        btn_folder.pack(side="right", padx=T.px(4), pady=T.px(6))
+
+        btn_guide = tk.Button(
+            toolbar, text="Extraction Guide", bg=T.BG_PANEL, fg=T.GOLD, activebackground=T.BG_ALT, activeforeground=T.GOLD,
+            font=self.fonts["header_small"], relief="flat", padx=T.px(10), pady=T.px(4), command=self._open_guide, cursor="hand2"
+        )
+        btn_guide.pack(side="right", padx=T.px(4), pady=T.px(6))
 
         # Main split container
         paned = tk.PanedWindow(self, orient="horizontal", bg=T.BORDER, sashwidth=4)
@@ -50,11 +78,8 @@ class BrowserPage(tk.Frame):
 
         cols = ("stage", "index", "name", "renodx_hash", "size")
         self.tree = ttk.Treeview(left_frame, columns=cols, show="headings", selectmode="browse")
-        self.tree.heading("stage", text="Stage")
-        self.tree.heading("index", text="#")
-        self.tree.heading("name", text="Shader Name")
-        self.tree.heading("renodx_hash", text="RenoDX Hash")
-        self.tree.heading("size", text="Size")
+        for col, title in self.col_titles.items():
+            self.tree.heading(col, text=title, command=lambda c=col: self._sort_by_column(c))
 
         self.tree.column("stage", width=T.px(55), anchor="center")
         self.tree.column("index", width=T.px(50), anchor="center")
@@ -146,21 +171,241 @@ class BrowserPage(tk.Frame):
         self.detail_text.tag_configure("var_offset", font=self.fonts["mono_small"], foreground=T.TEXT_DIM)
         self.detail_text.tag_configure("var_name", font=self.fonts["mono_small"], foreground=T.TEXT_MAIN)
 
+        self._update_headings()
+
+    def _open_guide(self):
+        from r2core import rpf_reader
+        from pathlib import Path
+        import os
+
+        guide = tk.Toplevel(self)
+        guide.title("RDR2 Game Shaders & CodeX Extraction Guide")
+        guide.geometry(f"{T.px(920)}x{T.px(640)}")
+        guide.minsize(T.px(800), T.px(540))
+        guide.configure(bg=T.BG)
+        guide.transient(self.winfo_toplevel())
+        guide.grab_set()
+
+        # Top Red Accent Stripe
+        tk.Frame(guide, bg=T.ACCENT, height=T.px(3)).pack(fill="x")
+
+        # Top Header Bar
+        top_bar = tk.Frame(guide, bg=T.BG_PANEL)
+        top_bar.pack(fill="x", padx=T.px(16), pady=(T.px(14), T.px(8)))
+
+        tk.Label(
+            top_bar, text="GAME SHADER EXTRACTION REFERENCE", font=self.fonts["title"],
+            fg=T.GOLD, bg=T.BG_PANEL
+        ).pack(anchor="w", padx=T.px(14), pady=(T.px(10), T.px(2)))
+
+        tk.Label(
+            top_bar,
+            text="Extract shaders from shaders_x64.rpf using your own copy of CodeX, then point the tool to your folder.",
+            font=self.fonts["body"], fg=T.TEXT_MUTED, bg=T.BG_PANEL
+        ).pack(anchor="w", padx=T.px(14), pady=(0, T.px(10)))
+
+        # Step-by-Step Workflow Cards
+        steps_frame = tk.Frame(guide, bg=T.BG)
+        steps_frame.pack(fill="x", padx=T.px(16), pady=(0, T.px(8)))
+
+        steps = [
+            ("1. Open Game Archive", "shaders_x64.rpf in your RDR2 folder\n(and update_1.rpf\\common\\shaders)."),
+            ("2. Export in CodeX", "Export shader files to any folder.\nKeep .bin hashes or rename them."),
+            ("3. Point Shader Tool", "Select your folder below or put\nfiles inside fxdb_files/ in this tool."),
+        ]
+        for idx, (stitle, sdesc) in enumerate(steps):
+            scard = tk.Frame(steps_frame, bg=T.BG_ALT, bd=1, relief="solid")
+            scard.pack(side="left", fill="both", expand=True, padx=(0 if idx == 0 else T.px(6), 0))
+            tk.Label(scard, text=stitle, font=self.fonts["body_bold"], fg=T.GOLD, bg=T.BG_ALT).pack(anchor="w", padx=T.px(10), pady=(T.px(8), T.px(2)))
+            tk.Label(scard, text=sdesc, font=self.fonts["small"], fg=T.TEXT_MUTED, bg=T.BG_ALT, justify="left").pack(anchor="w", padx=T.px(10), pady=(0, T.px(8)))
+
+        # Middle: Structured Table of Shaders
+        table_label_frame = tk.Frame(guide, bg=T.BG)
+        table_label_frame.pack(fill="x", padx=T.px(16), pady=(T.px(6), T.px(2)))
+        tk.Label(table_label_frame, text="SHADER DATABASES REFERENCE MAPPING", font=self.fonts["header_small"], fg=T.TEXT_MAIN, bg=T.BG).pack(side="left")
+
+        table_frame = tk.Frame(guide, bg=T.BG_INPUT, bd=1, relief="solid")
+        table_frame.pack(fill="both", expand=True, padx=T.px(16), pady=(0, T.px(10)))
+
+        tcols = ("status", "hash", "target", "api", "count", "size", "desc")
+        gtree = ttk.Treeview(table_frame, columns=tcols, show="headings", selectmode="browse", height=5)
+        gtree.heading("status", text="Status")
+        gtree.heading("hash", text="CodeX Export (.bin)")
+        gtree.heading("target", text="Target File (.fxdb)")
+        gtree.heading("api", text="API")
+        gtree.heading("count", text="Shaders")
+        gtree.heading("size", text="Expected Size")
+        gtree.heading("desc", text="Role / Content")
+
+        gtree.column("status", width=T.px(80), anchor="center")
+        gtree.column("hash", width=T.px(130), anchor="w")
+        gtree.column("target", width=T.px(190), anchor="w")
+        gtree.column("api", width=T.px(80), anchor="center")
+        gtree.column("count", width=T.px(70), anchor="e")
+        gtree.column("size", width=T.px(95), anchor="e")
+        gtree.column("desc", width=T.px(220), anchor="w")
+
+        gtree.tag_configure("even", background=T.BG_INPUT)
+        gtree.tag_configure("odd", background=T.BG_ALT)
+
+        gscroll = ttk.Scrollbar(table_frame, orient="vertical", command=gtree.yview)
+        gtree.configure(yscrollcommand=gscroll.set)
+        gtree.pack(side="left", fill="both", expand=True)
+        gscroll.pack(side="right", fill="y")
+
+        def populate_table():
+            gtree.delete(*gtree.get_children())
+            statuses = rpf_reader.check_folder_shader_status()
+            for idx, s in enumerate(statuses):
+                tag = "even" if idx % 2 == 0 else "odd"
+                stat_text = "Detected" if s["found"] else "Missing"
+                size_str = f"{s['expected_size'] / 1_000_000:.1f} MB" if s['expected_size'] >= 1_000_000 else f"{s['expected_size'] // 1_000} KB"
+                gtree.insert("", "end", values=(
+                    stat_text,
+                    s["hash_file"],
+                    s["fxdb_name"],
+                    s["api"].upper(),
+                    f"{s['shader_count']:,}",
+                    size_str,
+                    s["description"]
+                ), tags=(tag,))
+
+        populate_table()
+
+        # Folder config card
+        folder_card = tk.Frame(guide, bg=T.BG_PANEL, bd=1, relief="solid")
+        folder_card.pack(fill="x", padx=T.px(16), pady=(0, T.px(10)))
+
+        fc_top = tk.Frame(folder_card, bg=T.BG_PANEL)
+        fc_top.pack(fill="x", padx=T.px(12), pady=(T.px(8), T.px(4)))
+
+        tk.Label(fc_top, text="Current Shaders Folder:", font=self.fonts["body_bold"], fg=T.GOLD, bg=T.BG_PANEL).pack(side="left")
+
+        curr_dump_val = tk.StringVar(value=settings.settings().get("Paths", "rdr2_shaders_dump", str(paths.DEFAULT_DUMP_DIR)))
+        lbl_path = tk.Label(folder_card, textvariable=curr_dump_val, font=self.fonts["mono_small"], fg=T.TEXT_MAIN, bg=T.BG_PANEL, anchor="w")
+        lbl_path.pack(fill="x", padx=T.px(12), pady=(0, T.px(8)))
+
+        # Bottom Action Bar
+        btn_bar = tk.Frame(guide, bg=T.BG)
+        btn_bar.pack(fill="x", padx=T.px(16), pady=(0, T.px(14)))
+
+        def choose_folder():
+            from tkinter import filedialog
+            chosen = filedialog.askdirectory(initialdir=curr_dump_val.get(), title="Select RDR2 Shaders / FXDB Folder")
+            if chosen:
+                settings.settings().set("Paths", "rdr2_shaders_dump", chosen)
+                settings.settings().save()
+                curr_dump_val.set(chosen)
+                catalog.get_default_catalog(force_rebuild=True)
+                populate_table()
+                self.refresh()
+                self.app.set_status(f"Updated shaders directory to: {chosen}")
+
+        def open_folder():
+            p = curr_dump_val.get()
+            if p and Path(p).exists():
+                os.startfile(p)
+
+        tk.Button(
+            btn_bar, text="Select Shaders Folder...", bg=T.ACCENT, fg=T.ON_ACCENT,
+            activebackground=T.ACCENT_HOVER, activeforeground=T.ON_ACCENT,
+            font=self.fonts["header_small"], relief="flat", padx=T.px(14), pady=T.px(6),
+            command=choose_folder, cursor="hand2"
+        ).pack(side="left", padx=(0, T.px(8)))
+
+        tk.Button(
+            btn_bar, text="Open in Explorer", bg=T.BG_PANEL, fg=T.TEXT_MAIN,
+            activebackground=T.BG_ALT, activeforeground=T.TEXT_MAIN,
+            font=self.fonts["header_small"], relief="flat", padx=T.px(12), pady=T.px(6),
+            command=open_folder, cursor="hand2"
+        ).pack(side="left")
+
+        tk.Button(
+            btn_bar, text="Close", bg=T.BG_PANEL, fg=T.TEXT_MUTED,
+            activebackground=T.BG_ALT, activeforeground=T.TEXT_MAIN,
+            font=self.fonts["header_small"], relief="flat", padx=T.px(16), pady=T.px(6),
+            command=guide.destroy, cursor="hand2"
+        ).pack(side="right")
+
+    def _change_dump_folder(self):
+        from tkinter import filedialog
+        curr = settings.settings().get("Paths", "rdr2_shaders_dump", str(paths.DEFAULT_DUMP_DIR))
+        chosen = filedialog.askdirectory(initialdir=curr, title="Select RDR2 Shaders / FXDB Folder")
+        if chosen:
+            settings.settings().set("Paths", "rdr2_shaders_dump", chosen)
+            settings.settings().save()
+            catalog.get_default_catalog(force_rebuild=True)
+            self.refresh()
+            self.app.set_status(f"Updated shaders directory to: {chosen}")
+
+    def _update_headings(self):
+        arrow = " \u25BC" if self.sort_desc else " \u25B2"
+        for col, title in self.col_titles.items():
+            if col == self.sort_col:
+                self.tree.heading(col, text=f"{title}{arrow}")
+            else:
+                self.tree.heading(col, text=title)
+
+    def _sort_by_column(self, col: str):
+        selected_crc = self.selected_entry.crc if self.selected_entry else None
+        if self.sort_col == col:
+            self.sort_desc = not self.sort_desc
+        else:
+            self.sort_col = col
+            self.sort_desc = True if col == "size" else False
+        self._update_headings()
+        self.refresh()
+        if selected_crc is not None:
+            for idx, e in enumerate(self._displayed_entries):
+                if e.crc == selected_crc:
+                    iid = str(idx)
+                    self.tree.selection_set(iid)
+                    self.tree.see(iid)
+                    break
+
+    def _sort_entries(self, entries: list) -> list:
+        col = self.sort_col
+        desc = self.sort_desc
+
+        if col == "stage":
+            return sorted(entries, key=lambda e: (e.stage, e.index), reverse=desc)
+        elif col == "index":
+            return sorted(entries, key=lambda e: (e.index, e.stage), reverse=desc)
+        elif col == "name":
+            return sorted(entries, key=lambda e: e.name.lower(), reverse=desc)
+        elif col == "renodx_hash":
+            return sorted(entries, key=lambda e: e.renodx_hash.lower(), reverse=desc)
+        elif col == "size":
+            return sorted(entries, key=lambda e: e.byte_size, reverse=desc)
+        return entries
+
     def refresh(self):
         self.tree.delete(*self.tree.get_children())
         cat = catalog.get_default_catalog()
         api = self.app.active_api
+
+        # Update library selector for current API
+        libs = ["All Databases"] + cat.get_libraries(api)
+        self.lib_menu["values"] = libs
+        if self.lib_var.get() not in libs:
+            self.lib_var.set("All Databases")
+
         stage_filter = self.stage_var.get()
         st = None if stage_filter == "ALL" else stage_filter
+        lib_filter = None if self.lib_var.get() == "All Databases" else self.lib_var.get()
 
-        entries = cat.find(query=self.search.get(), stage=st, api=api)
-        for idx, e in enumerate(entries[:400]):
+        entries = cat.find(query=self.search.get(), stage=st, api=api, library=lib_filter)
+        entries = self._sort_entries(entries)
+        self._displayed_entries = entries
+
+        for idx, e in enumerate(entries):
             row_tag = "even" if idx % 2 == 0 else "odd"
-            self.tree.insert("", "end", iid=f"{e.stage}_{e.index}_{e.crc}", values=(
+            self.tree.insert("", "end", iid=str(idx), values=(
                 e.stage, e.index, e.name, e.renodx_hash, f"{e.byte_size:,} B"
             ), tags=(row_tag,))
 
-        self.app.set_status(f"Loaded {len(entries)} shaders for {api.upper()}")
+        lib_info = f" ({lib_filter})" if lib_filter else ""
+        self.app.set_status(f"Loaded {len(entries):,} shaders for {api.upper()}{lib_info}")
 
     def _on_search(self, query: str):
         self.refresh()
@@ -170,18 +415,12 @@ class BrowserPage(tk.Frame):
         if not sel:
             return
 
-        item = self.tree.item(sel[0])
-        st, idx_str, _, renodx_hash_str, _ = item["values"]
-        idx = int(idx_str)
-
-        cat = catalog.get_default_catalog()
-        entries = cat.find(query=renodx_hash_str, stage=st, api=self.app.active_api)
-        if not entries:
-            entries = [e for e in cat.entries if e.stage == st and e.index == idx and e.api.lower() == self.app.active_api.lower()]
-        if not entries:
+        try:
+            row_idx = int(sel[0])
+            entry = self._displayed_entries[row_idx]
+        except (ValueError, IndexError):
             return
 
-        entry = entries[0]
         self.selected_entry = entry
 
         self.btn_decompile.config(state="normal")
@@ -193,6 +432,7 @@ class BrowserPage(tk.Frame):
 
         # Load reflection
         try:
+            from pathlib import Path
             fxdb = parse_file(entry.fxdb_path, decompress_bytecode=True)
             rec = fxdb.shaders[entry.stage][entry.index]
 
@@ -212,6 +452,11 @@ class BrowserPage(tk.Frame):
 
             append("\nSHADER METADATA\n", "title")
             append("----------------------------------------------------------------------\n", "meta_key")
+            from r2core import rpf_reader
+            fxdb_disp = rpf_reader.resolve_fxdb_name(Path(entry.fxdb_path).name)
+            if fxdb_disp.lower() != Path(entry.fxdb_path).name.lower():
+                fxdb_disp = f"{fxdb_disp} ({Path(entry.fxdb_path).name})"
+            append("Library:     ", "meta_key"); append(f"{fxdb_disp}\n", "meta_val")
             append("Name:        ", "meta_key"); append(f"{rec.name}\n", "meta_val")
             append("Stage:       ", "meta_key"); append(f"{rec.stage} (Index {rec.index})\n", "meta_val")
             append("API:         ", "meta_key"); append(f"{entry.api.upper()}\n", "meta_val")

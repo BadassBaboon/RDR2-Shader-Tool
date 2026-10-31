@@ -57,6 +57,21 @@ All binaries and dynamic libraries are self-contained in the repository:
 
 ---
 
+## Extracting Game Shaders with CodeX
+
+Red Dead Redemption 2 stores its shader databases inside `shaders_x64.rpf` in your game installation folder. Use your own copy of CodeX (or OpenIV) to extract them:
+
+1. Open `shaders_x64.rpf` in CodeX.
+2. Extract the shader binary files to a folder on your PC or directly into `fxdb_files/` in this repository.
+3. CodeX exports these entries using their Rage hash filenames. The tool automatically maps them, or you can rename them:
+   - `0xFEEB1B85.bin` = `sga_vulkan_final.fxdb` (Main Vulkan shader library, 12,883 shaders)
+   - `0x8068F4F9.bin` = `sga_win32_60_final.fxdb` (Main DirectX 12 shader library, 12,255 shaders)
+   - `0xA8C90D00.bin` = `sga_vulkan_final_init.fxdb` (Vulkan initialization shaders, 369 shaders)
+   - `0x2A25B571.bin` = `sga_win32_60_final_init.fxdb` (DirectX 12 initialization shaders, 367 shaders)
+4. Launch the shader tool and point to your extracted folder using the **Folder...** button or the **Extraction Guide** dialog.
+
+---
+
 ## Quick Start
 
 ### Graphical Interface

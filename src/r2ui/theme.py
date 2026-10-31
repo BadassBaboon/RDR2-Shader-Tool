@@ -84,6 +84,7 @@ def setup_fonts(root: tk.Tk) -> dict:
         "header": tkfont.Font(family=base_family, size=px(11), weight="bold"),
         "header_small": tkfont.Font(family=base_family, size=px(9), weight="bold"),
         "body": tkfont.Font(family=base_family, size=px(10)),
+        "body_bold": tkfont.Font(family=base_family, size=px(10), weight="bold"),
         "small": tkfont.Font(family=base_family, size=px(8)),
         "mono": tkfont.Font(family=mono_family, size=px(10)),
         "mono_small": tkfont.Font(family=mono_family, size=px(9)),
