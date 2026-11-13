@@ -71,6 +71,11 @@ def cmd_find(ctx: Ctx, args):
     cat = catalog.get_default_catalog()
     api = args.api or settings.settings().active_api
     entries = cat.find(query=args.query, stage=args.stage, api=api, effect=args.effect)
+    if not entries and not args.api:
+        # Fallback search across all APIs if not found in active API
+        entries = cat.find(query=args.query, stage=args.stage, api=None, effect=args.effect)
+        if entries:
+            api = entries[0].api
 
     data = [e.to_dict() for e in entries]
     lines = [
@@ -92,6 +97,10 @@ def cmd_info(ctx: Ctx, args):
     cat = catalog.get_default_catalog()
     api = args.api or settings.settings().active_api
     entries = cat.find(query=args.target, api=api)
+    if not entries and not args.api:
+        entries = cat.find(query=args.target, api=None)
+        if entries:
+            api = entries[0].api
     if not entries:
         raise CliError(f"Shader '{args.target}' not found in catalog for API '{api}'.")
 

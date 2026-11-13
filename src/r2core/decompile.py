@@ -210,7 +210,7 @@ def decompile_shader(
         rec = shader_or_bytes
         st = rec.stage
         sdata = rec.data
-        bc = rec.bytecode  # already decompressed
+        bc = rec.get_decompressed_bytecode()
         if rec.is_spirv or api.lower() == "vulkan":
             return decompile_spirv(bc, target_lang=target_lang, stage=st, shader_data=sdata)
         else:

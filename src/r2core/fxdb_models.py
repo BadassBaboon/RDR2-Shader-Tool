@@ -164,11 +164,13 @@ class ShaderRecord:
 
     @property
     def is_spirv(self) -> bool:
-        return len(self.bytecode) >= 4 and self.bytecode[:4] == b'\x03\x02#\x07'
+        bc = self.get_decompressed_bytecode()
+        return len(bc) >= 4 and bc[:4] == b'\x03\x02#\x07'
 
     @property
     def is_dxbc(self) -> bool:
-        return len(self.bytecode) >= 4 and self.bytecode[:4] == b'DXBC'
+        bc = self.get_decompressed_bytecode()
+        return len(bc) >= 4 and bc[:4] == b'DXBC'
 
     def get_decompressed_bytecode(self) -> bytes:
         """Return decompressed bytecode, decompressing on demand if still compressed."""

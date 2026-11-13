@@ -1,6 +1,13 @@
 """Entry point for RDR2 Shader Tool MCP Server."""
 
 import sys
+
+MIN_PYTHON = (3, 9)
+if sys.version_info < MIN_PYTHON:
+    current = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    sys.stderr.write(f"Error: Python 3.9+ is required (found {current} at {sys.executable})\n")
+    sys.exit(1)
+
 from pathlib import Path
 
 root_dir = Path(__file__).resolve().parent

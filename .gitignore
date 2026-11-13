@@ -3,6 +3,8 @@ bin/
 tools/
 *.dll
 *.exe
+!compilers/*.dll
+!compilers/*.exe
 __pycache__/
 *.py[cod]
 *$py.class

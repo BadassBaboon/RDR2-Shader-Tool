@@ -1,0 +1,13 @@
+# Red Dead Redemption 2 Shader Tool
+# Minimum Python Version: 3.9 (Python 3.9, 3.10, 3.11, 3.12, 3.13)
+#
+# Core runtime dependencies:
+# None. All runtime dependencies are part of the Python standard library
+# (tkinter, dataclasses, ctypes, struct, subprocess, zlib, json, argparse, winreg, etc.).
+#
+# If you are on Linux or a custom minimal Windows install without tkinter, install it via:
+# Ubuntu/Debian: sudo apt-get install python3-tk
+# Arch Linux:    sudo pacman -S tk
+#
+# Optional development dependencies:
+# pytest>=7.0.0

@@ -10,7 +10,7 @@ if str(src_dir) not in sys.path:
     sys.path.insert(0, str(src_dir))
 
 from r2ui.pages.browser import BrowserPage
-from r2core import catalog
+from r2core import catalog, paths
 
 
 class MockApp:
@@ -120,26 +120,36 @@ class TestBrowserUI(unittest.TestCase):
         guide_win.destroy()
 
     def test_replaced_filter_and_tag(self):
-        # Set filter to REPLACED
-        self.page.stage_var.set("REPLACED")
-        self.page.refresh()
-        displayed = self.page._displayed_entries
-        self.assertEqual(len(displayed), 1, "Should show exactly 1 modified shader (VS_Clear_Wrapped)")
-        names = [e.name for e in displayed]
-        self.assertIn("VS_Clear_Wrapped", names)
-        self.assertNotIn("VS_PassthroughComposite_Wrapped", names)
+        fixture_path = paths.COMPILED_DIR / "vulkan" / "VS_Clear_Wrapped.vs_6_0.spv"
+        created_fixture = False
+        if not fixture_path.exists():
+            paths.ensure(fixture_path.parent)
+            fixture_path.write_bytes(b"\x03\x02\x23\x07" + b"\x00" * 64)
+            created_fixture = True
 
-        # Verify row tag in treeview is "modified" and stage text does not have clipped [MOD]
-        first_item = self.page.tree.get_children()[0]
-        tags = self.page.tree.item(first_item, "tags")
-        self.assertIn("modified", tags)
-        values = self.page.tree.item(first_item, "values")
-        self.assertEqual(values[0], "VS")
-        self.assertNotIn("[MOD]", values[0])
+        try:
+            # Set filter to REPLACED
+            self.page.stage_var.set("REPLACED")
+            self.page.refresh()
+            displayed = self.page._displayed_entries
+            self.assertEqual(len(displayed), 1, "Should show exactly 1 modified shader (VS_Clear_Wrapped)")
+            names = [e.name for e in displayed]
+            self.assertIn("VS_Clear_Wrapped", names)
+            self.assertNotIn("VS_PassthroughComposite_Wrapped", names)
 
-        # Reset filter
-        self.page.stage_var.set("ALL")
-        self.page.refresh()
+            # Verify row tag in treeview is "modified" and stage text does not have clipped [MOD]
+            first_item = self.page.tree.get_children()[0]
+            tags = self.page.tree.item(first_item, "tags")
+            self.assertIn("modified", tags)
+            values = self.page.tree.item(first_item, "values")
+            self.assertEqual(values[0], "VS")
+            self.assertNotIn("[MOD]", values[0])
+        finally:
+            # Reset filter
+            self.page.stage_var.set("ALL")
+            self.page.refresh()
+            if created_fixture and fixture_path.exists():
+                fixture_path.unlink()
 
     def test_effect_filter_and_combination(self):
         # 1. Filter by specific effect
